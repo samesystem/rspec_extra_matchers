@@ -81,7 +81,13 @@ module RSpecExtraMatchers
       end
 
       def extract_graphql_type(klass)
-        klass.is_a?(Class) && klass < GraphqlRails::Model ? klass.graphql.graphql_type : klass
+        graphql_rails_class?(klass) ? klass.graphql.graphql_type : klass
+      end
+
+      def graphql_rails_class?(klass)
+        klass.is_a?(Class) &&
+          defined?(GraphqlRails::Model) &&
+          klass < GraphqlRails::Model
       end
 
       def strict?
