@@ -7,7 +7,7 @@ require_relative 'type_matcher'
 module RSpecExtraMatchers
   module GraphqlMatchers
     # Matcher for testing graphql types
-    class SuccessfulGraphqlControllerResponseMatcher
+    class SuccessfulGraphqlControllerResponseMatcher # rubocop:disable Metrics/ClassLength
       DEFAULT_ERROR_MESSAGE = 'expected request to be successful'
 
       def matches?(controller_response)
@@ -62,33 +62,51 @@ module RSpecExtraMatchers
       end
 
       def validate_graphql_model_matching
-        return true if response_result.nil? || unwrapped_result_instance.nil?
         return true if action_response_graphql_model.nil?
-        return true if unwrapped_result_instance.is_a?(action_response_graphql_model)
+
+        mismatching_item = result_items.compact.find { !_1.is_a?(action_response_graphql_model) }
+        return true if mismatching_item.nil?
 
         add_error(
           "Expected response to be an instance of #{action_response_graphql_model}, " \
-          "but it's #{unwrapped_result_instance.class}"
+          "but it's #{mismatching_item.class}"
         )
         false
       end
 
       def validate_response_graphql_attributes_matching
-        matcher = TypeMatcher.new(action_response_graphql_type.unwrap, deeply: false, strictly: false)
-        matcher.matches?(unwrapped_result_instance)
-        return if matcher.error_messages.empty?
+        messages = result_items.each_with_index.flat_map do |item, index|
+          prefix = list_response? ? "[#{index}] " : ''
+          item_error_messages(item).map { "#{prefix}#{_1}" }
+        end
+        return if messages.empty?
 
-        error_message =
-          "Response type does not match the expected type:\n" \
-          "#{matcher.error_messages.take(5).join("\n").indent(2)}"
-
-        add_error(error_message)
+        add_error("Response type does not match the expected type:\n#{messages.take(5).join("\n").indent(2)}")
       end
 
-      def unwrapped_result_instance
-        return response_result.first if list_response?
+      def item_error_messages(item)
+        return item_nullability_error_messages if item.nil?
 
-        response_result
+        matcher = TypeMatcher.new(action_response_graphql_type.unwrap, deeply: false, strictly: false)
+        matcher.matches?(item)
+        matcher.error_messages
+      end
+
+      def item_nullability_error_messages
+        list_type = action_response_graphql_type
+        list_type = list_type.of_type if list_type.non_null?
+        list_type.of_type.non_null? ? ['expected non-nullable list item not to be `nil`'] : []
+      end
+
+      def result_items
+        @result_items ||=
+          if response_result.nil?
+            []
+          elsif list_response?
+            response_result.map(&:itself)
+          else
+            [response_result]
+          end
       end
 
       def list_response?

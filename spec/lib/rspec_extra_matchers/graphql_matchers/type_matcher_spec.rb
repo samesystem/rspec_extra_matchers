@@ -64,6 +64,19 @@ RSpec.describe RSpecExtraMatchers::GraphqlMatchers::TypeMatcher do
       end
     end
 
+    context 'when field method on record is private' do
+      let(:record) do
+        Class.new do
+          private
+
+          def id = '1'
+          def name = 'John'
+        end.new
+      end
+
+      it { is_expected.to be_empty }
+    end
+
     context 'when record field class in not compatible with graphql type field' do
       let(:record_params) { super().merge(name: true) }
 
@@ -114,6 +127,150 @@ RSpec.describe RSpecExtraMatchers::GraphqlMatchers::TypeMatcher do
           expect(error_messages)
             .to eq(['Expected value of the "role" enum field to be one of [:admin, :regular], but was `:invalid`'])
         end
+      end
+
+      context 'when field is a list of enums' do
+        let(:graphql_type) do
+          enum = graphql_enum_type
+          Class.new(GraphQL::Schema::Object) do
+            graphql_name "DummyUser#{rand(10**9)}"
+            field :roles, [enum], null: false
+          end
+        end
+
+        let(:record) { Struct.new(:roles).new(roles) }
+
+        context 'when all values match enum' do
+          let(:roles) { %i[admin regular] }
+
+          it { is_expected.to be_empty }
+        end
+
+        context 'when one value does not match enum' do
+          let(:roles) { %i[admin invalid] }
+
+          it 'returns error message' do
+            expect(error_messages)
+              .to eq(['Expected value of the "roles[1]" enum field to be one of [:admin, :regular], but was `:invalid`'])
+          end
+        end
+      end
+    end
+
+    context 'with custom scalar type' do
+      let(:hour_scalar) do
+        Class.new(GraphQL::Schema::Scalar) do
+          graphql_name "DummyHour#{rand(1**10)}"
+
+          def self.coerce_result(value, _context)
+            Integer(value)
+          end
+        end
+      end
+
+      let(:graphql_type) do
+        scalar = hour_scalar
+        Class.new(super()) do
+          graphql.attribute(:hour).type(scalar)
+        end
+      end
+
+      let(:record_class) { Struct.new(:id, :name, :location, :hour, keyword_init: true) }
+
+      context 'when value can be coerced by the scalar' do
+        let(:record_params) { super().merge(hour: 12) }
+
+        it { is_expected.to be_empty }
+      end
+
+      context 'when value can not be coerced by the scalar' do
+        let(:record_params) { super().merge(hour: 'noon') }
+
+        it 'returns error message' do
+          expect(error_messages.first).to start_with('Scalar "hour" field can not serialize value "noon":')
+        end
+      end
+    end
+
+    context 'with union type' do
+      let(:matcher) { super().tap(&:deeply) }
+
+      let(:post_type) do
+        Class.new(GraphQL::Schema::Object) do
+          graphql_name "DummyPost#{rand(10**9)}"
+          field :title, String, null: false
+        end
+      end
+
+      let(:poll_type) do
+        Class.new(GraphQL::Schema::Object) do
+          graphql_name "DummyPoll#{rand(10**9)}"
+          field :question, String, null: false
+        end
+      end
+
+      let(:post_class) { Struct.new(:title) }
+      let(:poll_class) { Struct.new(:question) }
+
+      let(:content_union) do
+        post, poll, post_class = [post_type, poll_type, self.post_class]
+        Class.new(GraphQL::Schema::Union) do
+          graphql_name "DummyContent#{rand(10**9)}"
+          possible_types post, poll
+
+          define_singleton_method(:resolve_type) do |object, _context|
+            object.is_a?(post_class) ? post : poll
+          end
+        end
+      end
+
+      let(:graphql_type) do
+        union = content_union
+        Class.new(super()) do
+          graphql.attribute(:contents).type(union.to_non_null_type.to_list_type)
+        end
+      end
+
+      let(:record_class) { Struct.new(:id, :name, :location, :contents, keyword_init: true) }
+      let(:record_params) { super().merge(contents:) }
+
+      context 'when each item matches its resolved type' do
+        let(:contents) { [post_class.new('Hello'), poll_class.new('Why?')] }
+
+        it { is_expected.to be_empty }
+      end
+
+      context 'when item does not match its resolved type' do
+        let(:contents) { [post_class.new('Hello'), poll_class.new(nil)] }
+
+        it 'returns error message' do
+          expect(error_messages).to eq(['expected non-nullable field "contents[1].question" not to be `nil`'])
+        end
+      end
+
+      context 'when union can not resolve the type' do
+        let(:content_union) do
+          post, poll = [post_type, poll_type]
+          Class.new(GraphQL::Schema::Union) do
+            graphql_name "DummyContent#{rand(10**9)}"
+            possible_types post, poll
+
+            def self.resolve_type(_object, _context) = nil
+          end
+        end
+
+        let(:contents) { [post_class.new('Hello')] }
+
+        it 'returns error message' do
+          expect(error_messages.first).to match(/Could not resolve union type .* for "contents\[0\]" field value/)
+        end
+      end
+
+      context 'when graphql type itself is a union' do
+        let(:graphql_type) { content_union }
+        let(:record) { poll_class.new('Why?') }
+
+        it { is_expected.to be_empty }
       end
     end
 

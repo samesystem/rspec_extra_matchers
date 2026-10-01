@@ -74,6 +74,59 @@ RSpec.describe RSpecExtraMatchers::GraphqlMatchers::SuccessfulGraphqlControllerR
 
       it { is_expected.to be_falsey }
     end
+
+    context 'when list response is empty' do
+      let(:response_result) { [] }
+
+      it { is_expected.to be_truthy }
+    end
+
+    context 'when nullable response is nil' do
+      let(:response_result) { nil }
+      let(:controller) do
+        type_name = dummy_type_name
+        Class.new(GraphqlRails::Controller) do
+          action(:index).returns(type_name)
+        end
+      end
+
+      it { is_expected.to be_truthy }
+    end
+
+    context 'when action is paginated' do
+      let(:controller) do
+        type_name = dummy_type_name
+        Class.new(GraphqlRails::Controller) do
+          action(:index).paginated.returns("[#{type_name}!]!")
+        end
+      end
+
+      it { is_expected.to be_truthy }
+    end
+
+    context 'when non-nullable list contains nil' do
+      let(:response_result) { [action_response_type.new, nil] }
+      let(:controller) do
+        type_name = dummy_type_name
+        Class.new(GraphqlRails::Controller) do
+          action(:index).returns("[#{type_name}!]!")
+        end
+      end
+
+      it { is_expected.to be_falsey }
+    end
+
+    context 'when nullable list contains nil' do
+      let(:response_result) { [action_response_type.new, nil] }
+
+      it { is_expected.to be_truthy }
+    end
+
+    context 'when a list item other than the first does not match' do
+      let(:response_result) { [action_response_type.new, Struct.new(:name).new('x')] }
+
+      it { is_expected.to be_falsey }
+    end
   end
 
   describe '#failure_message' do
@@ -135,10 +188,18 @@ RSpec.describe RSpecExtraMatchers::GraphqlMatchers::SuccessfulGraphqlControllerR
         end
 
         let(:response_class) { Struct.new(:name) }
-        let(:response_result) { response_class.new }
+        let(:response_result) { [response_class.new] }
 
         it 'returns clear message' do
           expect(failure_message).to include('Method `id` for "id" field does not exist on record')
+        end
+
+        context 'when only a later list item does not match' do
+          let(:response_result) { [Struct.new(:id).new('1'), response_class.new] }
+
+          it 'points to the item index' do
+            expect(failure_message).to include('[1] Method `id` for "id" field does not exist on record')
+          end
         end
       end
     end

@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative 'union_type_resolver'
+
 module RSpecExtraMatchers
   module GraphqlMatchers
     # Matcher for testing graphql types
@@ -113,14 +115,12 @@ module RSpecExtraMatchers
       end
 
       def assert_basic_type
-        assert_basic_type_for(value:, compatible_classes:)
+        assert_basic_type_for(value:, type:)
       end
 
-      def compatible_classes
-        @compatible_classes ||= fetch_compatible_classes(value:, type:)
-      end
-
-      def assert_basic_type_for(value:, compatible_classes:)
+      def assert_basic_type_for(value:, type:)
+        compatible_classes = fetch_compatible_classes(type:)
+        return assert_custom_scalar(value:, type:) if compatible_classes.nil?
         return if compatible_classes.any? { |klass| value.is_a?(klass) }
 
         expected_type =
@@ -133,7 +133,13 @@ module RSpecExtraMatchers
         add_error(:wrong_type, expected_type:, actual_type: value.class.to_s)
       end
 
-      def fetch_compatible_classes(value:, type:) # rubocop:disable Metrics/MethodLength, Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity, Metrics/AbcSize
+      def assert_custom_scalar(value:, type:)
+        type.unwrap.coerce_result(value, GraphQL::Query::NullContext.instance)
+      rescue StandardError => e
+        add_error(:wrong_scalar_value, value: value.inspect, error: e.message)
+      end
+
+      def fetch_compatible_classes(type:) # rubocop:disable Metrics/MethodLength, Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
         inner_type = type.unwrap
         if inner_type <= GraphQL::Types::Int
           [Integer]
@@ -151,16 +157,15 @@ module RSpecExtraMatchers
           [Date, ActiveSupport::TimeWithZone]
         elsif inner_type <= GraphQL::Types::JSON
           [Hash, Array, String, Integer, Float, TrueClass, FalseClass, NilClass]
-        else
-          raise "Unknown scalar type #{graphql_scalar}"
         end
       end
 
-      def assert_enum_type
+      def assert_enum_type(value: self.value, type: self.type, field_name: self.field_name)
         expected_values = type.unwrap.values.values.map(&:value)
         return if expected_values.include?(value)
 
         message_options = {
+          field_name:,
           expected_values: expected_values.inspect,
           actual_value: value.inspect
         }
@@ -169,15 +174,24 @@ module RSpecExtraMatchers
 
       def assert_nested_fields(value, type:, prefix: '')
         unwrapped_type = type.unwrap
-        return assert_nested_basic_type(value, type: unwrapped_type) if basic_type?(unwrapped_type)
+        item_field_name = "#{field_name}#{prefix}"
+        return assert_basic_type_for(value:, type: unwrapped_type) if basic_type?(unwrapped_type)
+        return assert_enum_type(value:, type: unwrapped_type, field_name: item_field_name) if enum_type?(unwrapped_type)
 
-        type.unwrap.fields.each_value do |field|
+        object_type = resolve_object_type(unwrapped_type, value:, field_name: item_field_name)
+        object_type&.fields&.each_value do |field|
           assert_nested_type(value, type: field.type, suffix: "#{prefix}.#{field.name}", property: field.method_str)
         end
       end
 
-      def assert_nested_basic_type(value, type:)
-        assert_basic_type_for(value:, compatible_classes: fetch_compatible_classes(value:, type:))
+      def resolve_object_type(type, value:, field_name:)
+        return type unless UnionTypeResolver.union?(type)
+
+        resolved_type = UnionTypeResolver.call(type, value)
+        return resolved_type if resolved_type
+
+        add_error(:unresolved_union_type, union: type.graphql_name, field_name:, value: value.inspect)
+        nil
       end
 
       def assert_nested_type(value_parent, type:, suffix: '', property: self.property) # rubocop:disable Metrics/MethodLength
@@ -200,7 +214,7 @@ module RSpecExtraMatchers
         type.unwrap < GraphQL::Schema::Scalar
       end
 
-      def enum_type?
+      def enum_type?(type = self.type)
         type.unwrap < GraphQL::Schema::Enum
       end
 
@@ -208,8 +222,9 @@ module RSpecExtraMatchers
         @detailed_error_messages << { type:, field_name:, **message_options }
       end
 
+      # GraphqlRails resolves attributes with `send`, so private methods are valid too
       def parent_method_exist?
-        value_parent.respond_to?(property)
+        value_parent.respond_to?(property, true)
       end
 
       def value
