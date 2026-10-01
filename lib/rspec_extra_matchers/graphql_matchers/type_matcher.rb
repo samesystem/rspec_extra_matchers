@@ -6,6 +6,7 @@
 
 require 'rspec/matchers/composable'
 require_relative 'assert_type_and_value'
+require_relative 'union_type_resolver'
 
 module RSpecExtraMatchers
   module GraphqlMatchers
@@ -26,7 +27,9 @@ module RSpecExtraMatchers
         wrong_enum_value: 'Expected value of the "%<field_name>s" enum field to be one of %<expected_values>s, ' \
                           'but was `%<actual_value>s`',
         not_a_graphql_type: 'Expected a GraphQL type, but got %<graphql_type>s',
-        graphql_rails_type_mismatch: 'According to graphql configuration, %<value>s should be an instance of %<expected_type>s, but it is %<actual_type>s'
+        graphql_rails_type_mismatch: 'According to graphql configuration, %<value>s should be an instance of %<expected_type>s, but it is %<actual_type>s',
+        wrong_scalar_value: 'Scalar "%<field_name>s" field can not serialize value %<value>s: %<error>s',
+        unresolved_union_type: 'Could not resolve union type %<union>s for "%<field_name>s" field value %<value>s'
       }.freeze
 
       attr_reader :detailed_error_messages, :graphql_type, :record
@@ -96,10 +99,23 @@ module RSpecExtraMatchers
 
       def assert_type
         if graphql_type.is_a?(GraphQL::Schema::Wrapper) || graphql_type < GraphQL::Schema::Member
-          graphql_type.unwrap.fields.each_value { |field| assert_field(field) }
+          object_type&.fields&.each_value { |field| assert_field(field) }
         else
           @detailed_error_messages << { type: :not_a_graphql_type, graphql_type: }
         end
+      end
+
+      def object_type
+        type = graphql_type.unwrap
+        return type unless UnionTypeResolver.union?(type)
+
+        resolved_type = UnionTypeResolver.call(type, record)
+        return resolved_type if resolved_type
+
+        @detailed_error_messages << {
+          type: :unresolved_union_type, union: type.graphql_name, field_name: type.graphql_name, value: record.inspect
+        }
+        nil
       end
 
       def assert_field(field)
