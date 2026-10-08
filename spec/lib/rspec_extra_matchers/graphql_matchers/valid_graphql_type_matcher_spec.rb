@@ -69,7 +69,8 @@ RSpec.describe RSpecExtraMatchers::GraphqlMatchers::ValidGraphqlTypeMatcher do
       let(:record_params) { super().merge(name: true) }
 
       it 'returns error message' do
-        expect(error_messages).to eq(['Expected field "name" to be one of `[String, Numeric]`, but was `TrueClass`'])
+        expect(error_messages)
+          .to eq(['Expected field "name" to be one of `[String, Symbol, Numeric, Date, Time]`, but was `TrueClass`'])
       end
     end
 
@@ -152,7 +153,8 @@ RSpec.describe RSpecExtraMatchers::GraphqlMatchers::ValidGraphqlTypeMatcher do
 
           it 'returns error message' do
             expect(error_messages)
-              .to eq(['Expected field "location.city" to be one of `[String, Numeric]`, but was `TrueClass`'])
+              .to eq(['Expected field "location.city" to be one of `[String, Symbol, Numeric, Date, Time]`, ' \
+                      'but was `TrueClass`'])
           end
         end
 
@@ -178,7 +180,8 @@ RSpec.describe RSpecExtraMatchers::GraphqlMatchers::ValidGraphqlTypeMatcher do
 
             it 'returns error message' do
               expect(error_messages)
-                .to eq(['Expected field "locations[1].city" to be one of `[String, Numeric]`, but was `FalseClass`'])
+                .to eq(['Expected field "locations[1].city" to be one of `[String, Symbol, Numeric, Date, Time]`, ' \
+                        'but was `FalseClass`'])
             end
           end
         end

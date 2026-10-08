@@ -98,11 +98,29 @@ module RSpecExtraMatchers
       end
 
       def assert_type
-        if graphql_type.is_a?(GraphQL::Schema::Wrapper) || graphql_type < GraphQL::Schema::Member
-          object_type&.fields&.each_value { |field| assert_field(field) }
-        else
+        if !graphql_type.is_a?(GraphQL::Schema::Wrapper) && !(graphql_type < GraphQL::Schema::Member)
           @detailed_error_messages << { type: :not_a_graphql_type, graphql_type: }
+        elsif leaf_type?
+          assert_leaf_value
+        else
+          object_type&.fields&.each_value { |field| assert_field(field) }
         end
+      end
+
+      def leaf_type?
+        inner_type = graphql_type.unwrap
+        inner_type < GraphQL::Schema::Scalar || inner_type < GraphQL::Schema::Enum
+      end
+
+      def assert_leaf_value
+        @detailed_error_messages += AssertTypeAndValue.new(
+          type: graphql_type,
+          value_parent: { value: record },
+          field_name: graphql_type.unwrap.graphql_name,
+          deeply: deeply?,
+          property: 'value',
+          strictly: strict?
+        ).call
       end
 
       def object_type

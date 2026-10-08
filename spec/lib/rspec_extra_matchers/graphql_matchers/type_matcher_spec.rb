@@ -81,7 +81,99 @@ RSpec.describe RSpecExtraMatchers::GraphqlMatchers::TypeMatcher do
       let(:record_params) { super().merge(name: true) }
 
       it 'returns error message' do
-        expect(error_messages).to eq(['Expected field "name" to be one of `[String, Numeric]`, but was `TrueClass`'])
+        expect(error_messages)
+          .to eq(['Expected field "name" to be one of `[String, Symbol, Numeric, Date, Time]`, but was `TrueClass`'])
+      end
+    end
+
+    context 'when string field value is a Symbol' do
+      let(:record_params) { super().merge(name: :john) }
+
+      it { is_expected.to be_empty }
+    end
+
+    context 'when string field value is a Date' do
+      let(:record_params) { super().merge(name: Date.new(2024, 1, 1)) }
+
+      it { is_expected.to be_empty }
+    end
+
+    context 'when ID field value is a Symbol' do
+      let(:record_params) { super().merge(id: :sale) }
+
+      it { is_expected.to be_empty }
+    end
+
+    context 'when record is a Hash' do
+      context 'with symbol keys' do
+        let(:record) { { id: '1', name: 'John' } }
+
+        it { is_expected.to be_empty }
+      end
+
+      context 'with string keys' do
+        let(:record) { { 'id' => '1', 'name' => 'John' } }
+
+        it { is_expected.to be_empty }
+      end
+
+      context 'when non-nullable key is missing' do
+        let(:record) { { id: '1' } }
+
+        it 'returns error message' do
+          expect(error_messages).to eq(['expected non-nullable field "name" not to be `nil`'])
+        end
+      end
+
+      context 'when value has the wrong type' do
+        let(:record) { { id: '1', name: true } }
+
+        it 'returns error message' do
+          expect(error_messages)
+            .to eq(['Expected field "name" to be one of `[String, Symbol, Numeric, Date, Time]`, but was `TrueClass`'])
+        end
+      end
+    end
+
+    context 'when graphql type is a scalar' do
+      let(:graphql_type) { GraphQL::Types::Boolean.to_non_null_type }
+
+      context 'when value matches the scalar' do
+        let(:record) { true }
+
+        it { is_expected.to be_empty }
+      end
+
+      context 'when value does not match the scalar' do
+        let(:record) { 'yes' }
+
+        it 'returns error message' do
+          expect(error_messages)
+            .to eq(['Expected field "Boolean" to be one of `[TrueClass, FalseClass]`, but was `String`'])
+        end
+      end
+    end
+
+    context 'when graphql type is an enum' do
+      let(:graphql_type) do
+        Class.new(GraphQL::Schema::Enum) do
+          graphql_name "DummyRole#{rand(10**9)}Enum"
+          value 'ADMIN', value: :admin
+        end
+      end
+
+      context 'when value matches the enum' do
+        let(:record) { :admin }
+
+        it { is_expected.to be_empty }
+      end
+
+      context 'when value does not match the enum' do
+        let(:record) { :guest }
+
+        it 'returns error message' do
+          expect(error_messages.first).to match(/enum field to be one of \[:admin\], but was `:guest`/)
+        end
       end
     end
 
@@ -308,7 +400,8 @@ RSpec.describe RSpecExtraMatchers::GraphqlMatchers::TypeMatcher do
 
           it 'returns error message' do
             expect(error_messages)
-              .to eq(['Expected field "location.city" to be one of `[String, Numeric]`, but was `TrueClass`'])
+              .to eq(['Expected field "location.city" to be one of `[String, Symbol, Numeric, Date, Time]`, ' \
+                      'but was `TrueClass`'])
           end
         end
 
@@ -334,7 +427,8 @@ RSpec.describe RSpecExtraMatchers::GraphqlMatchers::TypeMatcher do
 
             it 'returns error message' do
               expect(error_messages)
-                .to eq(['Expected field "locations[1].city" to be one of `[String, Numeric]`, but was `TrueClass`'])
+                .to eq(['Expected field "locations[1].city" to be one of `[String, Symbol, Numeric, Date, Time]`, ' \
+                     'but was `TrueClass`'])
             end
           end
         end

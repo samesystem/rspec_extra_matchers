@@ -122,10 +122,98 @@ RSpec.describe RSpecExtraMatchers::GraphqlMatchers::SuccessfulGraphqlControllerR
       it { is_expected.to be_truthy }
     end
 
+    context 'when action returns a scalar' do
+      let(:controller) do
+        Class.new(GraphqlRails::Controller) do
+          action(:index).returns('Boolean!')
+        end
+      end
+
+      context 'when result matches the scalar' do
+        let(:response_result) { true }
+
+        it { is_expected.to be_truthy }
+      end
+
+      context 'when result does not match the scalar' do
+        let(:response_result) { [1, 2] }
+
+        it { is_expected.to be_falsey }
+      end
+    end
+
+    context 'when action returns a GraphQL::Schema::Object type' do
+      let(:action_response_type) do
+        name = dummy_type_name
+        Class.new(GraphQL::Schema::Object) do
+          graphql_name name
+          field :id, GraphQL::Types::ID, null: false
+        end
+      end
+      let(:controller) do
+        type_name = dummy_type_name
+        Class.new(GraphqlRails::Controller) do
+          action(:index).returns("#{type_name}!")
+        end
+      end
+
+      context 'when result has the type fields' do
+        let(:response_result) { Struct.new(:id).new('1') }
+
+        it { is_expected.to be_truthy }
+      end
+
+      context 'when result lacks the type fields' do
+        let(:response_result) { Struct.new(:name).new('x') }
+
+        it { is_expected.to be_falsey }
+      end
+
+      context 'when the type also includes GraphqlRails::Model' do
+        let(:action_response_type) do
+          name = dummy_type_name
+          Class.new(GraphQL::Schema::Object) do
+            include GraphqlRails::Model
+
+            graphql_name name
+            field :id, GraphQL::Types::ID, null: false
+          end
+        end
+        let(:response_result) { Struct.new(:id).new('1') }
+
+        it { is_expected.to be_truthy }
+      end
+    end
+
+    context 'when result is a Hash' do
+      let(:controller) do
+        type_name = dummy_type_name
+        Class.new(GraphqlRails::Controller) do
+          action(:index).returns("#{type_name}!")
+        end
+      end
+      let(:action_response_type) do
+        name = dummy_type_name
+        Class.new(GraphQL::Schema::Object) do
+          graphql_name name
+          field :id, GraphQL::Types::ID, null: false
+        end
+      end
+      let(:response_result) { { id: '1' } }
+
+      it { is_expected.to be_truthy }
+    end
+
     context 'when a list item other than the first does not match' do
       let(:response_result) { [action_response_type.new, Struct.new(:name).new('x')] }
 
       it { is_expected.to be_falsey }
+    end
+  end
+
+  describe '#description' do
+    it 'describes the expectation' do
+      expect(matcher.description).to eq('be a successful GraphQL request returning the declared type')
     end
   end
 
