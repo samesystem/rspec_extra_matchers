@@ -20,6 +20,10 @@ module RSpecExtraMatchers
         error_message || DEFAULT_ERROR_MESSAGE
       end
 
+      def description
+        'be a successful GraphQL request returning the declared type'
+      end
+
       private
 
       attr_reader :controller_response, :error_message
@@ -110,7 +114,7 @@ module RSpecExtraMatchers
       end
 
       def list_response?
-        return false if response_result.is_a?(Hash)
+        return false if response_result.is_a?(Hash) || response_result.is_a?(Struct)
         return false if defined?(ActionController::Parameters) && response_result.is_a?(ActionController::Parameters)
 
         response_result.respond_to?(:each)
@@ -135,7 +139,15 @@ module RSpecExtraMatchers
       def action_response_graphql_model
         return @action_response_graphql_model if defined?(@action_response_graphql_model)
 
-        @action_response_graphql_model = controller.action(action_name).type_parser.graphql_model
+        model = controller.action(action_name).type_parser.graphql_model
+        @action_response_graphql_model = graphql_rails_model?(model) ? model : nil
+      end
+
+      # GraphQL schema types wrap the resolved object rather than being instantiated by controllers,
+      # even when they also include GraphqlRails::Model
+      def graphql_rails_model?(model)
+        model.is_a?(Class) && defined?(GraphqlRails::Model) && model < GraphqlRails::Model &&
+          !(model < GraphQL::Schema::Member)
       end
 
       def add_error(error_message)

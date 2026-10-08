@@ -144,9 +144,9 @@ module RSpecExtraMatchers
         if inner_type <= GraphQL::Types::Int
           [Integer]
         elsif inner_type <= GraphQL::Types::ID
-          [Integer, String]
+          [Integer, String, Symbol]
         elsif inner_type <= GraphQL::Types::String
-          [String, Numeric]
+          [String, Symbol, Numeric, Date, Time]
         elsif inner_type <= GraphQL::Types::Float
           [Float, Integer, Numeric]
         elsif inner_type <= GraphQL::Types::Boolean
@@ -222,19 +222,24 @@ module RSpecExtraMatchers
         @detailed_error_messages << { type:, field_name:, **message_options }
       end
 
-      # GraphqlRails resolves attributes with `send`, so private methods are valid too
+      # GraphqlRails resolves attributes with `send`, so private methods are valid too.
+      # GraphQL resolves Hash objects by key, and a missing key resolves to `nil`.
       def parent_method_exist?
-        value_parent.respond_to?(property, true)
+        value_parent.is_a?(Hash) || value_parent.respond_to?(property, true)
       end
 
       def value
         return @value if defined?(@value)
 
-        @value = value_parent.send(property)
+        @value = value_parent.is_a?(Hash) ? hash_value : value_parent.send(property)
       rescue Exception => e
         raise ValueExecutionError, e.message do
           set_backtrace e.backtrace
         end
+      end
+
+      def hash_value
+        value_parent.key?(property.to_sym) ? value_parent[property.to_sym] : value_parent[property.to_s]
       end
     end
   end
