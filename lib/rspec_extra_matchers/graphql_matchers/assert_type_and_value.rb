@@ -237,9 +237,11 @@ module RSpecExtraMatchers
         value_parent.is_a?(Hash) || value_parent.respond_to?(property, true)
       end
 
-      # Like GraphQL, a resolver method on the type wins over a Hash key lookup
+      # Like GraphQL, a resolver method on the type wins over a Hash key lookup.
+      # Interfaces are modules and can't be instantiated, so they fall back to the key lookup.
       def type_resolver?
-        value_parent.is_a?(Hash) && owner_type&.public_method_defined?(field.resolver_method)
+        value_parent.is_a?(Hash) && owner_type.is_a?(Class) &&
+          owner_type.public_method_defined?(field.resolver_method)
       end
 
       def value
@@ -253,19 +255,28 @@ module RSpecExtraMatchers
           else
             value_parent.send(property)
           end
-      rescue NoMethodError => e
-        # GraphqlRails resolvers call the attribute method on the Hash itself
-        raise MissingFieldError if e.receiver.equal?(value_parent) && e.name == property.to_sym
-
-        raise ValueExecutionError, e.message, e.backtrace
+      rescue MissingFieldError
+        raise
       rescue Exception => e
         raise ValueExecutionError, e.message do
           set_backtrace e.backtrace
         end
       end
 
+      # Resolver arguments are not supported: the method is called without any.
       def type_resolver_value
         owner_type.send(:new, value_parent, GraphQL::Query::NullContext.instance).public_send(field.resolver_method)
+      rescue NoMethodError => e
+        # GraphqlRails resolvers call the attribute method on the Hash itself
+        raise MissingFieldError if missing_on_hash?(e)
+
+        raise
+      end
+
+      def missing_on_hash?(error)
+        error.name == property.to_sym && error.receiver.equal?(value_parent)
+      rescue ArgumentError # raised by #receiver when the error was built without one
+        false
       end
 
       # Mirrors GraphQL::Schema::Field's plain Hash lookup: a Hash default value is ignored, but a default proc
