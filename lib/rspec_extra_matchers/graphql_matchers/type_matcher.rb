@@ -103,7 +103,8 @@ module RSpecExtraMatchers
         elsif leaf_type?
           assert_leaf_value
         else
-          object_type&.fields&.each_value { |field| assert_field(field) }
+          owner_type = object_type
+          owner_type&.fields&.each_value { |field| assert_field(field, owner_type:) }
         end
       end
 
@@ -136,14 +137,16 @@ module RSpecExtraMatchers
         nil
       end
 
-      def assert_field(field)
+      def assert_field(field, owner_type:)
         @detailed_error_messages += AssertTypeAndValue.new(
           type: field.type,
           value_parent: record,
           field_name: field.name,
           deeply: deeply?,
           property: field.method_str,
-          strictly: strict?
+          strictly: strict?,
+          field:,
+          owner_type:
         ).call
       end
 

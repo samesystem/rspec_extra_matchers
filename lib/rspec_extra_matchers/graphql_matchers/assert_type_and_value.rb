@@ -8,7 +8,8 @@ module RSpecExtraMatchers
     class AssertTypeAndValue # rubocop:disable Metrics/ClassLength
       ValueExecutionError = Class.new(StandardError)
 
-      def initialize(type:, value_parent:, deeply:, strictly:, field_name: nil, checked_records: Set.new, property: nil) # rubocop:disable Metrics/ParameterLists
+      def initialize(type:, value_parent:, deeply:, strictly:, field_name: nil, checked_records: Set.new, property: nil, # rubocop:disable Metrics/ParameterLists
+                     field: nil, owner_type: nil)
         @value_parent = value_parent
         @deeply = deeply
         @strictly = strictly
@@ -17,6 +18,8 @@ module RSpecExtraMatchers
         @checked_records = checked_records
         @detailed_error_messages = []
         @property = property
+        @field = field
+        @owner_type = owner_type
       end
 
       def call
@@ -27,7 +30,8 @@ module RSpecExtraMatchers
 
       private
 
-      attr_reader :detailed_error_messages, :type, :checked_records, :value_parent, :field_name, :property
+      attr_reader :detailed_error_messages, :type, :checked_records, :value_parent, :field_name, :property, :field,
+                  :owner_type
 
       def assert_type_and_value # rubocop:disable Metrics/AbcSize
         return add_missing_method_error unless parent_method_exist?
@@ -180,7 +184,7 @@ module RSpecExtraMatchers
 
         object_type = resolve_object_type(unwrapped_type, value:, field_name: item_field_name)
         object_type&.fields&.each_value do |field|
-          assert_nested_type(value, type: field.type, suffix: "#{prefix}.#{field.name}", property: field.method_str)
+          assert_nested_type(value, field:, owner_type: object_type, suffix: "#{prefix}.#{field.name}")
         end
       end
 
@@ -194,17 +198,19 @@ module RSpecExtraMatchers
         nil
       end
 
-      def assert_nested_type(value_parent, type:, suffix: '', property: self.property) # rubocop:disable Metrics/MethodLength
+      def assert_nested_type(value_parent, field:, owner_type:, suffix: '') # rubocop:disable Metrics/MethodLength
         full_field_name = "#{field_name}#{suffix}"
         all_checked_records = checked_records + [value_parent]
         errors = self.class.new(
-          type:,
+          type: field.type,
           field_name: full_field_name,
           value_parent:,
           checked_records: all_checked_records,
           deeply: @deeply,
           strictly: @strictly,
-          property:
+          property: field.method_str,
+          field:,
+          owner_type:
         ).call
 
         @detailed_error_messages += errors
@@ -225,13 +231,21 @@ module RSpecExtraMatchers
       # GraphqlRails resolves attributes with `send`, so private methods are valid too.
       # GraphQL resolves Hash objects by key, and a missing key resolves to `nil`.
       def parent_method_exist?
-        value_parent.is_a?(Hash) || value_parent.respond_to?(property, true)
+        hash_lookup? || value_parent.respond_to?(property, true)
+      end
+
+      # GraphQL looks a Hash up by key only when the type has no resolver method for the field.
+      # GraphqlRails types define one for every attribute, and it calls the attribute method on the Hash.
+      def hash_lookup?
+        return false unless value_parent.is_a?(Hash)
+
+        owner_type.nil? || !owner_type.public_method_defined?(field.resolver_method)
       end
 
       def value
         return @value if defined?(@value)
 
-        @value = value_parent.is_a?(Hash) ? hash_value : value_parent.send(property)
+        @value = hash_lookup? ? hash_value : value_parent.send(property)
       rescue Exception => e
         raise ValueExecutionError, e.message do
           set_backtrace e.backtrace
