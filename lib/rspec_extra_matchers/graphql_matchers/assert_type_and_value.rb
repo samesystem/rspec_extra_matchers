@@ -7,6 +7,7 @@ module RSpecExtraMatchers
     # Matcher for testing graphql types
     class AssertTypeAndValue # rubocop:disable Metrics/ClassLength
       ValueExecutionError = Class.new(StandardError)
+      MissingFieldError = Class.new(StandardError)
 
       def initialize(type:, value_parent:, deeply:, strictly:, field_name: nil, checked_records: Set.new, property: nil, # rubocop:disable Metrics/ParameterLists
                      field: nil, owner_type: nil)
@@ -42,6 +43,8 @@ module RSpecExtraMatchers
         return assert_enum_type if enum_type?
 
         assert_complex_type
+      rescue MissingFieldError
+        add_missing_method_error
       rescue ValueExecutionError => e
         add_error(:raises_error, property:, field_name:, error: e.message)
       end
@@ -231,25 +234,38 @@ module RSpecExtraMatchers
       # GraphqlRails resolves attributes with `send`, so private methods are valid too.
       # GraphQL resolves Hash objects by key, and a missing key resolves to `nil`.
       def parent_method_exist?
-        hash_lookup? || value_parent.respond_to?(property, true)
+        value_parent.is_a?(Hash) || value_parent.respond_to?(property, true)
       end
 
-      # GraphQL looks a Hash up by key only when the type has no resolver method for the field.
-      # GraphqlRails types define one for every attribute, and it calls the attribute method on the Hash.
-      def hash_lookup?
-        return false unless value_parent.is_a?(Hash)
-
-        owner_type.nil? || !owner_type.public_method_defined?(field.resolver_method)
+      # Like GraphQL, a resolver method on the type wins over a Hash key lookup
+      def type_resolver?
+        value_parent.is_a?(Hash) && owner_type&.public_method_defined?(field.resolver_method)
       end
 
       def value
         return @value if defined?(@value)
 
-        @value = hash_lookup? ? hash_value : value_parent.send(property)
+        @value =
+          if type_resolver?
+            type_resolver_value
+          elsif value_parent.is_a?(Hash)
+            hash_value
+          else
+            value_parent.send(property)
+          end
+      rescue NoMethodError => e
+        # GraphqlRails resolvers call the attribute method on the Hash itself
+        raise MissingFieldError if e.receiver.equal?(value_parent) && e.name == property.to_sym
+
+        raise ValueExecutionError, e.message, e.backtrace
       rescue Exception => e
         raise ValueExecutionError, e.message do
           set_backtrace e.backtrace
         end
+      end
+
+      def type_resolver_value
+        owner_type.send(:new, value_parent, GraphQL::Query::NullContext.instance).public_send(field.resolver_method)
       end
 
       # Mirrors GraphQL::Schema::Field's plain Hash lookup: a Hash default value is ignored, but a default proc

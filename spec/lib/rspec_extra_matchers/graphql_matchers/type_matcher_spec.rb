@@ -170,25 +170,33 @@ RSpec.describe RSpecExtraMatchers::GraphqlMatchers::TypeMatcher do
         end
       end
 
-      context 'when only some fields have a resolver method on the type' do
+      context 'when a field has a resolver method on the type' do
         let(:graphql_type) do
-          base_type = Class.new(GraphQL::Schema::Object) do
-            def resolve_full_name
-              'John Doe'
+          Class.new(GraphQL::Schema::Object) do
+            graphql_name "DummyResponse#{rand(10**9)}"
+            field :errors, [String], null: false
+            field :error, String, null: false
+
+            def error
+              object[:errors].first
             end
           end
+        end
 
-          Class.new(base_type) do
-            graphql_name "DummyUser#{rand(10**9)}"
-            field :id, GraphQL::Types::ID, null: false
-            field :full_name, String, null: false, resolver_method: :resolve_full_name
+        context 'when the resolver method returns a valid value' do
+          let(:record) { { errors: ['Not allowed'] } }
+
+          it 'resolves the field with the type method, not by key' do
+            expect(error_messages).to be_empty
           end
         end
-        let(:record) { { id: '1', full_name: 'John Doe' } }
 
-        it 'reads by key only the fields without a resolver method' do
-          expect(error_messages.size).to eq(1)
-          expect(error_messages.first).to start_with('Method `full_name` for "fullName" field does not exist')
+        context 'when the resolver method returns an invalid value' do
+          let(:record) { { errors: [], error: 'Ignored key' } }
+
+          it 'returns error message' do
+            expect(error_messages).to eq(['expected non-nullable field "error" not to be `nil`'])
+          end
         end
       end
 
