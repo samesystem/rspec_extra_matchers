@@ -81,7 +81,204 @@ RSpec.describe RSpecExtraMatchers::GraphqlMatchers::TypeMatcher do
       let(:record_params) { super().merge(name: true) }
 
       it 'returns error message' do
-        expect(error_messages).to eq(['Expected field "name" to be one of `[String, Numeric]`, but was `TrueClass`'])
+        expect(error_messages)
+          .to eq(['Expected field "name" to be one of `[String, Symbol, Numeric, Date, Time]`, but was `TrueClass`'])
+      end
+    end
+
+    context 'when string field value is a Symbol' do
+      let(:record_params) { super().merge(name: :john) }
+
+      it { is_expected.to be_empty }
+    end
+
+    context 'when string field value is a Date' do
+      let(:record_params) { super().merge(name: Date.new(2024, 1, 1)) }
+
+      it { is_expected.to be_empty }
+    end
+
+    context 'when ID field value is a Symbol' do
+      let(:record_params) { super().merge(id: :sale) }
+
+      it { is_expected.to be_empty }
+    end
+
+    context 'when record is a Hash' do
+      context 'when graphql type is a GraphQL::Schema::Object' do
+        let(:graphql_type) do
+          Class.new(GraphQL::Schema::Object) do
+            graphql_name "DummyUser#{rand(10**9)}"
+            field :id, GraphQL::Types::ID, null: false
+            field :name, String, null: false
+          end
+        end
+
+        context 'with symbol keys' do
+          let(:record) { { id: '1', name: 'John' } }
+
+          it { is_expected.to be_empty }
+        end
+
+        context 'with string keys' do
+          let(:record) { { 'id' => '1', 'name' => 'John' } }
+
+          it { is_expected.to be_empty }
+        end
+
+        context 'when non-nullable key is missing' do
+          let(:record) { { id: '1' } }
+
+          it 'returns error message' do
+            expect(error_messages).to eq(['expected non-nullable field "name" not to be `nil`'])
+          end
+        end
+
+        context 'when non-nullable Boolean value is false' do
+          let(:graphql_type) do
+            Class.new(GraphQL::Schema::Object) do
+              graphql_name "DummyUser#{rand(10**9)}"
+              field :active, GraphQL::Types::Boolean, null: false
+            end
+          end
+          let(:record) { { active: false } }
+
+          it { is_expected.to be_empty }
+        end
+
+        context 'when non-nullable key is missing from a Hash with a default value' do
+          let(:record) { Hash.new('John').merge(id: '1') }
+
+          it 'returns error message' do
+            expect(error_messages).to eq(['expected non-nullable field "name" not to be `nil`'])
+          end
+        end
+
+        context 'when non-nullable key is missing from a Hash with a default proc' do
+          let(:record) { Hash.new { |_hash, key| key == 'name' ? 'John' : nil }.merge(id: '1') }
+
+          it { is_expected.to be_empty }
+        end
+
+        context 'when value has the wrong type' do
+          let(:record) { { id: '1', name: true } }
+
+          it 'returns error message' do
+            expect(error_messages)
+              .to eq(['Expected field "name" to be one of `[String, Symbol, Numeric, Date, Time]`, but was `TrueClass`'])
+          end
+        end
+      end
+
+      context 'when only some fields have a resolver method on the type' do
+        let(:graphql_type) do
+          base_type = Class.new(GraphQL::Schema::Object) do
+            def resolve_full_name
+              'John Doe'
+            end
+          end
+
+          Class.new(base_type) do
+            graphql_name "DummyUser#{rand(10**9)}"
+            field :id, GraphQL::Types::ID, null: false
+            field :full_name, String, null: false, resolver_method: :resolve_full_name
+          end
+        end
+        let(:record) { { id: '1', full_name: 'John Doe' } }
+
+        it 'reads by key only the fields without a resolver method' do
+          expect(error_messages.size).to eq(1)
+          expect(error_messages.first).to start_with('Method `full_name` for "fullName" field does not exist')
+        end
+      end
+
+      context 'when graphql type is a GraphqlRails::Model' do
+        let(:record) { { id: '1', name: 'John' } }
+
+        it 'returns error message, as GraphqlRails calls the attribute method on the Hash' do
+          expect(error_messages.first).to start_with('Method `id` for "id" field does not exist on record')
+        end
+      end
+    end
+
+    context 'when graphql type is a scalar' do
+      let(:graphql_type) { GraphQL::Types::Boolean.to_non_null_type }
+
+      context 'when value matches the scalar' do
+        let(:record) { true }
+
+        it { is_expected.to be_empty }
+      end
+
+      context 'when value does not match the scalar' do
+        let(:record) { 'yes' }
+
+        it 'returns error message' do
+          expect(error_messages)
+            .to eq(['Expected field "Boolean" to be one of `[TrueClass, FalseClass]`, but was `String`'])
+        end
+      end
+
+      context 'when non-nullable scalar value is nil' do
+        let(:matcher) { described_class.new(graphql_type, strictly: false) }
+
+        let(:record) { nil }
+
+        it 'returns error message' do
+          expect(error_messages).to eq(['expected non-nullable field "Boolean" not to be `nil`'])
+        end
+      end
+
+      context 'when graphql type is a list of scalars' do
+        let(:matcher) { described_class.new(graphql_type, strictly: false) }
+
+        let(:graphql_type) { GraphQL::Types::String.to_non_null_type.to_list_type }
+
+        context 'when items match the scalar' do
+          let(:record) { ['a', :b] }
+
+          it { is_expected.to be_empty }
+        end
+
+        context 'when an item does not match the scalar' do
+          let(:record) { ['a', true] }
+
+          it 'returns error message' do
+            expect(error_messages.first).to end_with('but was `TrueClass`')
+          end
+        end
+      end
+
+      context 'when nullable scalar value is nil in strict mode' do
+        let(:graphql_type) { GraphQL::Types::String }
+        let(:record) { nil }
+
+        it 'returns error message' do
+          expect(error_messages.first).to start_with('Using `strictly` matcher which does not allow `nil` values')
+        end
+      end
+    end
+
+    context 'when graphql type is an enum' do
+      let(:graphql_type) do
+        Class.new(GraphQL::Schema::Enum) do
+          graphql_name "DummyRole#{rand(10**9)}Enum"
+          value 'ADMIN', value: :admin
+        end
+      end
+
+      context 'when value matches the enum' do
+        let(:record) { :admin }
+
+        it { is_expected.to be_empty }
+      end
+
+      context 'when value does not match the enum' do
+        let(:record) { :guest }
+
+        it 'returns error message' do
+          expect(error_messages.first).to match(/enum field to be one of \[:admin\], but was `:guest`/)
+        end
       end
     end
 
@@ -308,7 +505,43 @@ RSpec.describe RSpecExtraMatchers::GraphqlMatchers::TypeMatcher do
 
           it 'returns error message' do
             expect(error_messages)
-              .to eq(['Expected field "location.city" to be one of `[String, Numeric]`, but was `TrueClass`'])
+              .to eq(['Expected field "location.city" to be one of `[String, Symbol, Numeric, Date, Time]`, ' \
+                      'but was `TrueClass`'])
+          end
+        end
+
+        context 'when nested value is a Hash' do
+          let(:location) { { :country => 'USA', 'city' => 'New York' } }
+
+          it { is_expected.to be_empty }
+        end
+
+        context 'when nested Hash value does not match' do
+          let(:location) { { country: 'USA', city: true } }
+
+          it 'returns error message' do
+            expect(error_messages)
+              .to eq(['Expected field "location.city" to be one of `[String, Symbol, Numeric, Date, Time]`, ' \
+                      'but was `TrueClass`'])
+          end
+        end
+
+        context 'when nested GraphqlRails type value is a Hash' do
+          let(:location_type) do
+            Class.new do
+              include GraphqlRails::Model
+
+              graphql do |c|
+                c.name("DummyLocation#{rand(10**9)}")
+                c.attribute(:country).type('String!')
+                c.attribute(:city).type('String!')
+              end
+            end
+          end
+          let(:location) { { country: 'USA', city: 'New York' } }
+
+          it 'returns error message, as GraphqlRails calls the attribute method on the Hash' do
+            expect(error_messages.first).to start_with('Method `country` for "location.country" field does not exist')
           end
         end
 
@@ -328,13 +561,24 @@ RSpec.describe RSpecExtraMatchers::GraphqlMatchers::TypeMatcher do
             it { is_expected.to be_empty }
           end
 
+          context 'when one Hash array item does not match' do
+            let(:locations) { [{ 'country' => 'USA', 'city' => 'Kaunas' }, { country: 'USA', city: true }] }
+
+            it 'returns error message' do
+              expect(error_messages)
+                .to eq(['Expected field "locations[1].city" to be one of `[String, Symbol, Numeric, Date, Time]`, ' \
+                     'but was `TrueClass`'])
+            end
+          end
+
           context 'when one array item does not match' do
             let(:invalid_location) { double('InvalidLocation', country: 'USA', city: true) }
             let(:locations) { [location, invalid_location] }
 
             it 'returns error message' do
               expect(error_messages)
-                .to eq(['Expected field "locations[1].city" to be one of `[String, Numeric]`, but was `TrueClass`'])
+                .to eq(['Expected field "locations[1].city" to be one of `[String, Symbol, Numeric, Date, Time]`, ' \
+                     'but was `TrueClass`'])
             end
           end
         end
