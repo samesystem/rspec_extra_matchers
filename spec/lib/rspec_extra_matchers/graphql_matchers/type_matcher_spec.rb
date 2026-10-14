@@ -170,25 +170,166 @@ RSpec.describe RSpecExtraMatchers::GraphqlMatchers::TypeMatcher do
         end
       end
 
-      context 'when only some fields have a resolver method on the type' do
+      context 'when a field has a resolver method on the type' do
+        let(:graphql_type) do
+          Class.new(GraphQL::Schema::Object) do
+            graphql_name "DummyResponse#{rand(10**9)}"
+            field :errors, [String], null: false
+            field :error, String, null: false
+
+            def error
+              object[:errors].first
+            end
+          end
+        end
+
+        context 'when the resolver method returns a valid value' do
+          let(:record) { { errors: ['Not allowed'] } }
+
+          it 'resolves the field with the type method, not by key' do
+            expect(error_messages).to be_empty
+          end
+        end
+
+        context 'when the resolver method returns an invalid value' do
+          let(:record) { { errors: [], error: 'Ignored key' } }
+
+          it 'returns error message' do
+            expect(error_messages).to eq(['expected non-nullable field "error" not to be `nil`'])
+          end
+        end
+
+        context 'when the resolver method calls the field name on another object' do
+          let(:graphql_type) do
+            Class.new(GraphQL::Schema::Object) do
+              graphql_name "DummyResponse#{rand(10**9)}"
+              field :error, String, null: true
+
+              def error
+                object[:errors].error
+              end
+            end
+          end
+          let(:record) { { errors: ['Not allowed'] } }
+
+          it 'returns the raised error, not a missing field' do
+            expect(error_messages.size).to eq(1)
+            expect(error_messages.first).to start_with('Method `error` for "error" field raised an error: ')
+            expect(error_messages.first).to include('Array')
+          end
+        end
+
+        context 'when the resolver method raises a NoMethodError without a receiver' do
+          let(:graphql_type) do
+            Class.new(GraphQL::Schema::Object) do
+              graphql_name "DummyResponse#{rand(10**9)}"
+              field :error, String, null: true
+
+              def error
+                raise NoMethodError.new('error delegated to user, but user is nil', :error)
+              end
+            end
+          end
+          let(:record) { { errors: ['Not allowed'] } }
+
+          it 'returns the raised error' do
+            expect(error_messages)
+              .to eq(['Method `error` for "error" field raised an error: error delegated to user, but user is nil'])
+          end
+        end
+
+        context 'when the resolver method calls another missing method on the Hash' do
+          let(:graphql_type) do
+            Class.new(GraphQL::Schema::Object) do
+              graphql_name "DummyResponse#{rand(10**9)}"
+              field :error, String, null: true
+
+              def error
+                object.errors
+              end
+            end
+          end
+          let(:record) { { errors: ['Not allowed'] } }
+
+          it 'returns the raised error, not a missing field' do
+            expect(error_messages.size).to eq(1)
+            expect(error_messages.first).to start_with('Method `error` for "error" field raised an error: ')
+            expect(error_messages.first).to include('errors')
+          end
+        end
+
+        context 'when the type method is private' do
+          let(:graphql_type) do
+            Class.new(GraphQL::Schema::Object) do
+              graphql_name "DummyResponse#{rand(10**9)}"
+              field :error, String, null: false
+
+              private
+
+              def error
+                nil
+              end
+            end
+          end
+          let(:record) { { error: 'Not allowed' } }
+
+          it 'reads the field by key' do
+            expect(error_messages).to be_empty
+          end
+        end
+      end
+
+      context 'when a nested field is an interface with a resolver method' do
+        let(:graphql_type) do
+          interface = Module.new do
+            include GraphQL::Schema::Interface
+
+            graphql_name "DummyNamed#{rand(10**9)}"
+            field :label, String, null: false
+
+            def label
+              object[:name].upcase
+            end
+          end
+
+          Class.new(GraphQL::Schema::Object) do
+            graphql_name "DummyOwner#{rand(10**9)}"
+            field :thing, interface, null: false
+          end
+        end
+        let(:record) { { thing: { label: 'Chair' } } }
+
+        it 'reads the interface field by key' do
+          expect(error_messages).to be_empty
+        end
+      end
+
+      context 'when a field has a resolver_method inherited from a base type' do
         let(:graphql_type) do
           base_type = Class.new(GraphQL::Schema::Object) do
             def resolve_full_name
-              'John Doe'
+              object[:first_name]
             end
           end
 
           Class.new(base_type) do
             graphql_name "DummyUser#{rand(10**9)}"
-            field :id, GraphQL::Types::ID, null: false
             field :full_name, String, null: false, resolver_method: :resolve_full_name
           end
         end
-        let(:record) { { id: '1', full_name: 'John Doe' } }
 
-        it 'reads by key only the fields without a resolver method' do
-          expect(error_messages.size).to eq(1)
-          expect(error_messages.first).to start_with('Method `full_name` for "fullName" field does not exist')
+        context 'when the resolver method returns a valid value' do
+          let(:record) { { first_name: 'John' } }
+
+          it { is_expected.to be_empty }
+        end
+
+        context 'when the resolver method returns nil and the field key is present' do
+          let(:record) { { first_name: nil, full_name: 'Ignored key' } }
+
+          it 'returns error message' do
+            expect(error_messages).to eq(['expected non-nullable field "fullName" not to be `nil`'])
+          end
         end
       end
 
