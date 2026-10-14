@@ -170,6 +170,28 @@ RSpec.describe RSpecExtraMatchers::GraphqlMatchers::TypeMatcher do
         end
       end
 
+      context 'when only some fields have a resolver method on the type' do
+        let(:graphql_type) do
+          base_type = Class.new(GraphQL::Schema::Object) do
+            def resolve_full_name
+              'John Doe'
+            end
+          end
+
+          Class.new(base_type) do
+            graphql_name "DummyUser#{rand(10**9)}"
+            field :id, GraphQL::Types::ID, null: false
+            field :full_name, String, null: false, resolver_method: :resolve_full_name
+          end
+        end
+        let(:record) { { id: '1', full_name: 'John Doe' } }
+
+        it 'reads by key only the fields without a resolver method' do
+          expect(error_messages.size).to eq(1)
+          expect(error_messages.first).to start_with('Method `full_name` for "fullName" field does not exist')
+        end
+      end
+
       context 'when graphql type is a GraphqlRails::Model' do
         let(:record) { { id: '1', name: 'John' } }
 
