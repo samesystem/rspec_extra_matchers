@@ -238,8 +238,13 @@ module RSpecExtraMatchers
         end
       end
 
+      # Mirrors GraphQL::Schema::Field: a Hash default value is ignored, but a default proc is called
       def hash_value
-        value_parent.key?(property.to_sym) ? value_parent[property.to_sym] : value_parent[property.to_s]
+        if value_parent.key?(property.to_sym)
+          value_parent[property.to_sym]
+        elsif value_parent.key?(property.to_s) || value_parent.default_proc
+          value_parent[property.to_s]
+        end
       end
     end
   end

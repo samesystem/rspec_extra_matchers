@@ -114,7 +114,9 @@ module RSpecExtraMatchers
       end
 
       def list_response?
-        return false if response_result.is_a?(Hash) || response_result.is_a?(Struct)
+        return false if response_result.is_a?(Hash)
+        # GraphQL iterates a Struct only when the field is a list
+        return action_response_graphql_type.list? if response_result.is_a?(Struct)
         return false if defined?(ActionController::Parameters) && response_result.is_a?(ActionController::Parameters)
 
         response_result.respond_to?(:each)

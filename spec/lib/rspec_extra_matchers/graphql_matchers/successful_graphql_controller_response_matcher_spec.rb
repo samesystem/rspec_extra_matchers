@@ -136,7 +136,7 @@ RSpec.describe RSpecExtraMatchers::GraphqlMatchers::SuccessfulGraphqlControllerR
       end
 
       context 'when result does not match the scalar' do
-        let(:response_result) { [1, 2] }
+        let(:response_result) { 'yes' }
 
         it { is_expected.to be_falsey }
       end
@@ -200,6 +200,12 @@ RSpec.describe RSpecExtraMatchers::GraphqlMatchers::SuccessfulGraphqlControllerR
         end
       end
       let(:response_result) { { id: '1' } }
+
+      it { is_expected.to be_truthy }
+    end
+
+    context 'when list action returns a Struct' do
+      let(:response_result) { Struct.new(:first, :second).new(action_response_type.new, action_response_type.new) }
 
       it { is_expected.to be_truthy }
     end

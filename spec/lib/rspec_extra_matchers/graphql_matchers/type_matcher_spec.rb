@@ -125,6 +125,32 @@ RSpec.describe RSpecExtraMatchers::GraphqlMatchers::TypeMatcher do
         end
       end
 
+      context 'when non-nullable Boolean value is false' do
+        let(:graphql_type) do
+          Class.new(GraphQL::Schema::Object) do
+            graphql_name "DummyUser#{rand(10**9)}"
+            field :active, GraphQL::Types::Boolean, null: false
+          end
+        end
+        let(:record) { { active: false } }
+
+        it { is_expected.to be_empty }
+      end
+
+      context 'when non-nullable key is missing from a Hash with a default value' do
+        let(:record) { Hash.new('John').merge(id: '1') }
+
+        it 'returns error message' do
+          expect(error_messages).to eq(['expected non-nullable field "name" not to be `nil`'])
+        end
+      end
+
+      context 'when non-nullable key is missing from a Hash with a default proc' do
+        let(:record) { Hash.new { |_hash, key| key == 'name' ? 'John' : nil }.merge(id: '1') }
+
+        it { is_expected.to be_empty }
+      end
+
       context 'when value has the wrong type' do
         let(:record) { { id: '1', name: true } }
 
@@ -150,6 +176,15 @@ RSpec.describe RSpecExtraMatchers::GraphqlMatchers::TypeMatcher do
         it 'returns error message' do
           expect(error_messages)
             .to eq(['Expected field "Boolean" to be one of `[TrueClass, FalseClass]`, but was `String`'])
+        end
+      end
+
+      context 'when nullable scalar value is nil in strict mode' do
+        let(:graphql_type) { GraphQL::Types::String }
+        let(:record) { nil }
+
+        it 'returns error message' do
+          expect(error_messages.first).to start_with('Using `strictly` matcher which does not allow `nil` values')
         end
       end
     end
