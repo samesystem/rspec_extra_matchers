@@ -263,7 +263,8 @@ module RSpecExtraMatchers
         end
       end
 
-      # Resolver arguments are not supported: the method is called without any.
+      # Not supported: resolver arguments (the method is called without any), a real query context,
+      # and `hash_key:`, which GraphQL checks before the resolver method.
       def type_resolver_value
         owner_type.send(:new, value_parent, GraphQL::Query::NullContext.instance).public_send(field.resolver_method)
       rescue NoMethodError => e
