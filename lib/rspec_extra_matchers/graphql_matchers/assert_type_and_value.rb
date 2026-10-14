@@ -238,7 +238,8 @@ module RSpecExtraMatchers
         end
       end
 
-      # Mirrors GraphQL::Schema::Field: a Hash default value is ignored, but a default proc is called
+      # Mirrors GraphQL::Schema::Field's plain Hash lookup: a Hash default value is ignored, but a default proc
+      # is called. Field options such as `hash_key:`, `dig:` and `fallback_value:` are not supported.
       def hash_value
         if value_parent.key?(property.to_sym)
           value_parent[property.to_sym]

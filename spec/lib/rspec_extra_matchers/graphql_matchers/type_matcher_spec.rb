@@ -179,6 +179,36 @@ RSpec.describe RSpecExtraMatchers::GraphqlMatchers::TypeMatcher do
         end
       end
 
+      context 'when non-nullable scalar value is nil' do
+        let(:matcher) { described_class.new(graphql_type, strictly: false) }
+
+        let(:record) { nil }
+
+        it 'returns error message' do
+          expect(error_messages).to eq(['expected non-nullable field "Boolean" not to be `nil`'])
+        end
+      end
+
+      context 'when graphql type is a list of scalars' do
+        let(:matcher) { described_class.new(graphql_type, strictly: false) }
+
+        let(:graphql_type) { GraphQL::Types::String.to_non_null_type.to_list_type }
+
+        context 'when items match the scalar' do
+          let(:record) { ['a', :b] }
+
+          it { is_expected.to be_empty }
+        end
+
+        context 'when an item does not match the scalar' do
+          let(:record) { ['a', true] }
+
+          it 'returns error message' do
+            expect(error_messages.first).to end_with('but was `TrueClass`')
+          end
+        end
+      end
+
       context 'when nullable scalar value is nil in strict mode' do
         let(:graphql_type) { GraphQL::Types::String }
         let(:record) { nil }

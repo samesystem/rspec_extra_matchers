@@ -205,7 +205,7 @@ RSpec.describe RSpecExtraMatchers::GraphqlMatchers::SuccessfulGraphqlControllerR
     end
 
     context 'when list action returns a Struct' do
-      let(:response_result) { Struct.new(:first, :second).new(action_response_type.new, action_response_type.new) }
+      let(:response_result) { Struct.new(:owner, :member).new(action_response_type.new, action_response_type.new) }
 
       it { is_expected.to be_truthy }
     end
