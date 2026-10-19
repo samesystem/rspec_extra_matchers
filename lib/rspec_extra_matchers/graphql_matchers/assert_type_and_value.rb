@@ -10,8 +10,8 @@ module RSpecExtraMatchers
       ValueExecutionError = Class.new(StandardError)
       MissingFieldError = Class.new(StandardError)
 
-      def initialize(type:, value_parent:, deeply:, strictly:, field_name: nil, checked_records: Set.new, property: nil, # rubocop:disable Metrics/ParameterLists
-                     field: nil, owner_type: nil)
+      def initialize(type:, value_parent:, deeply:, strictly:, field_name: nil, checked_records: Set.new, property: nil, # rubocop:disable Metrics/ParameterLists, Metrics/MethodLength
+                     field: nil, owner_type: nil, graphql_context: nil)
         @value_parent = value_parent
         @deeply = deeply
         @strictly = strictly
@@ -22,6 +22,7 @@ module RSpecExtraMatchers
         @property = property
         @field = field
         @owner_type = owner_type
+        @graphql_context = graphql_context
       end
 
       def call
@@ -33,7 +34,7 @@ module RSpecExtraMatchers
       private
 
       attr_reader :detailed_error_messages, :type, :checked_records, :value_parent, :field_name, :property, :field,
-                  :owner_type
+                  :owner_type, :graphql_context
 
       def assert_type_and_value # rubocop:disable Metrics/AbcSize
         return add_missing_method_error unless parent_method_exist?
@@ -128,7 +129,7 @@ module RSpecExtraMatchers
 
       def assert_basic_type_for(value:, type:)
         compatible_classes = fetch_compatible_classes(type:)
-        return assert_custom_scalar(value:, type:) if compatible_classes.nil?
+        return assert_coerced_scalar(value:, type:) if compatible_classes.nil?
         return if compatible_classes.any? { |klass| value.is_a?(klass) }
 
         expected_type =
@@ -141,13 +142,15 @@ module RSpecExtraMatchers
         add_error(:wrong_type, expected_type:, actual_type: value.class.to_s)
       end
 
-      def assert_custom_scalar(value:, type:)
+      def assert_coerced_scalar(value:, type:)
         type.unwrap.coerce_result(value, GraphQL::Query::NullContext.instance)
       rescue StandardError => e
         add_error(:wrong_scalar_value, value: value.inspect, error: e.message)
       end
 
-      def fetch_compatible_classes(type:) # rubocop:disable Metrics/MethodLength, Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
+      # Scalars without a class list, such as custom and date scalars, are checked through `coerce_result`.
+      # The other built-in scalars keep one, since their `coerce_result` accepts almost any value.
+      def fetch_compatible_classes(type:) # rubocop:disable Metrics/MethodLength
         inner_type = type.unwrap
         if inner_type <= GraphQL::Types::Int
           [Integer]
@@ -159,10 +162,6 @@ module RSpecExtraMatchers
           [Float, Integer, Numeric]
         elsif inner_type <= GraphQL::Types::Boolean
           [TrueClass, FalseClass]
-        elsif inner_type <= GraphQL::Types::ISO8601DateTime
-          [Time, DateTime]
-        elsif inner_type <= GraphQL::Types::ISO8601Date
-          [Date, ActiveSupport::TimeWithZone]
         elsif inner_type <= GraphQL::Types::JSON
           [Hash, Array, String, Integer, Float, TrueClass, FalseClass, NilClass]
         end
@@ -214,7 +213,8 @@ module RSpecExtraMatchers
           strictly: @strictly,
           property: field.method_str,
           field:,
-          owner_type:
+          owner_type:,
+          graphql_context:
         ).call
 
         @detailed_error_messages += errors
@@ -254,7 +254,7 @@ module RSpecExtraMatchers
           elsif value_parent.is_a?(Hash)
             hash_value
           else
-            value_parent.send(property)
+            with_graphql_context { value_parent.send(property) }
           end
       rescue MissingFieldError
         raise
@@ -262,6 +262,13 @@ module RSpecExtraMatchers
         raise ValueExecutionError, e.message do
           set_backtrace e.backtrace
         end
+      end
+
+      # GraphqlRails sets a model's query context for the duration of each field call
+      def with_graphql_context(&)
+        return yield if graphql_context.nil? || !value_parent.respond_to?(:with_graphql_context)
+
+        value_parent.with_graphql_context(graphql_context, &)
       end
 
       # Not supported: resolver arguments (the method is called without any), a real query context,

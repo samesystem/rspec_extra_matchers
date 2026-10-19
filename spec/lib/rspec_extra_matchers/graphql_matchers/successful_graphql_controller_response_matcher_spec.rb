@@ -216,6 +216,28 @@ RSpec.describe RSpecExtraMatchers::GraphqlMatchers::SuccessfulGraphqlControllerR
       it { is_expected.to be_falsey }
     end
 
+    context 'when a result field reads graphql_context' do
+      let(:action_response_type) do
+        Class.new(super()) do
+          def id
+            graphql_context.fetch(:current_user_id)
+          end
+        end
+      end
+
+      context 'when the response has the request context' do
+        before do
+          allow(controller_response).to receive(:context).and_return({ current_user_id: '1' })
+        end
+
+        it { is_expected.to be_truthy }
+      end
+
+      context 'when the response has no request context' do
+        it { is_expected.to be_falsey }
+      end
+    end
+
     context 'when the declared model is an STI class' do
       let(:sti_base) do
         base = Class.new { def id = '123' }

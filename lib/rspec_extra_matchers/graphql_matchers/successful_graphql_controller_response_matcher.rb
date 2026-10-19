@@ -92,7 +92,9 @@ module RSpecExtraMatchers
       def item_error_messages(item)
         return item_nullability_error_messages if item.nil?
 
-        matcher = TypeMatcher.new(action_response_graphql_type.unwrap, deeply: false, strictly: false)
+        matcher = TypeMatcher.new(
+          action_response_graphql_type.unwrap, deeply: false, strictly: false, graphql_context: request_context
+        )
         matcher.matches?(item)
         matcher.error_messages
       end
@@ -129,6 +131,11 @@ module RSpecExtraMatchers
 
       def action_name
         controller_response.action_name
+      end
+
+      # graphql_rails before Response#context gives no access to it
+      def request_context
+        controller_response.context if controller_response.respond_to?(:context)
       end
 
       def response_result

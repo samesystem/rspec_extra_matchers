@@ -530,6 +530,107 @@ RSpec.describe RSpecExtraMatchers::GraphqlMatchers::TypeMatcher do
       end
     end
 
+    context 'with date time type' do
+      let(:graphql_type) do
+        Class.new(super()) do
+          graphql.attribute(:changed_at).type('DateTime!')
+        end
+      end
+
+      let(:record_class) { Struct.new(:id, :name, :location, :changed_at, keyword_init: true) }
+
+      context 'when value is a Time' do
+        let(:record_params) { super().merge(changed_at: Time.new(2024, 1, 1, 12)) }
+
+        it { is_expected.to be_empty }
+      end
+
+      context 'when value is a Date' do
+        let(:record_params) { super().merge(changed_at: Date.new(2024, 1, 1)) }
+
+        it { is_expected.to be_empty }
+      end
+
+      context 'when value is a well-formatted String' do
+        let(:record_params) { super().merge(changed_at: '2024-01-01T12:00:00+02:00') }
+
+        it { is_expected.to be_empty }
+      end
+
+      context 'when value can not be serialized' do
+        let(:record_params) { super().merge(changed_at: 1_704_103_200) }
+
+        it 'returns error message' do
+          expect(error_messages.first).to start_with('Scalar "changedAt" field can not serialize value 1704103200:')
+        end
+      end
+    end
+
+    context 'with date type' do
+      let(:graphql_type) do
+        Class.new(super()) do
+          graphql.attribute(:born_on).type('Date!')
+        end
+      end
+
+      let(:record_class) { Struct.new(:id, :name, :location, :born_on, keyword_init: true) }
+
+      context 'when value is a Date' do
+        let(:record_params) { super().merge(born_on: Date.new(2024, 1, 1)) }
+
+        it { is_expected.to be_empty }
+      end
+
+      context 'when value is a Time' do
+        let(:record_params) { super().merge(born_on: Time.new(2024, 1, 1, 12)) }
+
+        it { is_expected.to be_empty }
+      end
+
+      context 'when value can not be serialized' do
+        let(:record_params) { super().merge(born_on: 'someday') }
+
+        it 'returns error message' do
+          expect(error_messages.first).to start_with('Scalar "bornOn" field can not serialize value "someday":')
+        end
+      end
+    end
+
+    context 'when a GraphqlRails model field reads graphql_context' do
+      let(:record) do
+        Class.new do
+          include GraphqlRails::Model
+
+          graphql do |c|
+            c.name("DummyContextUser#{rand(10**9)}")
+            c.attribute(:name).type('String!')
+          end
+
+          def name
+            graphql_context.fetch(:name)
+          end
+        end.new
+      end
+
+      let(:graphql_type) { record.class }
+
+      context 'with a graphql_context' do
+        let(:matcher) { described_class.new(graphql_type, graphql_context: { name: 'John' }) }
+
+        it { is_expected.to be_empty }
+
+        it 'unsets the context afterwards, as GraphqlRails does' do
+          expect(record.graphql_context).to be_nil
+        end
+      end
+
+      context 'without a graphql_context' do
+        it 'returns error message' do
+          expect(error_messages.first).to start_with('Method `name` for "name" field raised an error')
+        end
+      end
+    end
+
     context 'with union type' do
       let(:matcher) { super().tap(&:deeply) }
 
