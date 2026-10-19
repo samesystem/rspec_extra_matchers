@@ -676,6 +676,63 @@ RSpec.describe RSpecExtraMatchers::GraphqlMatchers::TypeMatcher do
         it { is_expected.to be_empty }
       end
 
+      context 'when the model is reached through an interface field' do
+        let(:matcher) { described_class.new(graphql_type, graphql_context: { name: 'John' }) }
+        let(:record) { owner_class.new(model_class.new) }
+        let(:graphql_type) { owner_class }
+        let(:interface) do
+          Module.new do
+            include GraphQL::Schema::Interface
+
+            graphql_name "DummyNamed#{rand(10**9)}"
+            field :name, String, null: false
+          end
+        end
+        let(:model_class) do
+          named_interface = interface
+          Class.new do
+            include GraphqlRails::Model
+
+            graphql do |c|
+              c.name("DummyContextPet#{rand(10**9)}")
+              c.implements(named_interface)
+              c.attribute(:name).type('String!')
+            end
+
+            def name
+              graphql_context.fetch(:name)
+            end
+          end
+        end
+        let(:owner_class) do
+          named_interface = interface
+          Class.new do
+            include GraphqlRails::Model
+
+            graphql do |c|
+              c.name("DummyContextOwner#{rand(10**9)}")
+              c.attribute(:pet).type(named_interface.to_non_null_type)
+            end
+
+            def initialize(pet)
+              @pet = pet
+            end
+
+            attr_reader :pet
+          end
+        end
+
+        it { is_expected.to be_empty }
+      end
+
+      context 'when the record is not a GraphqlRails model but its type is' do
+        let(:matcher) { described_class.new(graphql_type, graphql_context: { name: 'John' }) }
+        let(:record) { Struct.new(:name).new('John') }
+        let(:graphql_type) { model_class }
+
+        it { is_expected.to be_empty }
+      end
+
       context 'when the record is a subclass of the declared model' do
         let(:matcher) { described_class.new(graphql_type, graphql_context: { name: 'John' }) }
         let(:record) { Class.new(model_class).new }

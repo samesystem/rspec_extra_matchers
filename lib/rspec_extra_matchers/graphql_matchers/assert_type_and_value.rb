@@ -274,8 +274,13 @@ module RSpecExtraMatchers
       end
 
       def graphql_rails_field?
-        defined?(GraphqlRails::Types::ObjectType) && owner_type.is_a?(Class) &&
-          owner_type < GraphqlRails::Types::ObjectType && value_parent.respond_to?(:with_graphql_context)
+        defined?(GraphqlRails::Types::ObjectType) && value_parent.respond_to?(:with_graphql_context) &&
+          runtime_owner_type < GraphqlRails::Types::ObjectType
+      end
+
+      # GraphQL resolves an interface to the record's object type before calling its fields
+      def runtime_owner_type
+        owner_type.is_a?(Class) ? owner_type : value_parent.class.graphql.graphql_type
       end
 
       # Not supported: resolver arguments (the method is called without any), a real query context (graphql-ruby
