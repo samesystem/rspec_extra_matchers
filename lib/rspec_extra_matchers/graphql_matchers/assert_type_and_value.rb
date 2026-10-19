@@ -265,8 +265,8 @@ module RSpecExtraMatchers
         end
       end
 
-      # GraphqlRails sets a model's query context for the duration of each field call, but only on the type it
-      # built for that model; graphql-ruby leaves it unset when the model sits behind another type.
+      # Types GraphqlRails built set the query context for the duration of each field call;
+      # plain graphql-ruby types leave it unset.
       def with_graphql_context(&)
         return yield if graphql_context.nil? || !graphql_rails_field?
 
@@ -274,8 +274,8 @@ module RSpecExtraMatchers
       end
 
       def graphql_rails_field?
-        defined?(GraphqlRails::Model) && value_parent.is_a?(GraphqlRails::Model) &&
-          owner_type.equal?(value_parent.class.graphql.graphql_type)
+        defined?(GraphqlRails::Types::ObjectType) && owner_type.is_a?(Class) &&
+          owner_type < GraphqlRails::Types::ObjectType && value_parent.respond_to?(:with_graphql_context)
       end
 
       # Not supported: resolver arguments (the method is called without any), a real query context (graphql-ruby

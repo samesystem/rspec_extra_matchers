@@ -10,7 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 * `DateTime` and `Date` fields are validated with `coerce_result`, as GraphQL serializes them: a `DateTime` field accepts a `Date` and a well-formatted `String`, and a `Date` field accepts a `Time`. `Date` fields are as lenient as GraphQL: anything whose `to_s` parses as a date passes, such as the Integer `20240101`. Other built-in scalars keep their class checks, since their `coerce_result` accepts almost any value
-* `be_successful_graphql_request` sets a `GraphqlRails::Model`'s `graphql_context` to the request's context while calling each of its fields, as GraphqlRails does, so decorators that read it no longer fail. Needs a graphql_rails with `response.context` in its RSpec controller helpers
+* `be_successful_graphql_request` sets a `GraphqlRails::Model`'s `graphql_context` to the request's hash-like test context while calling fields of types GraphqlRails built, as GraphqlRails does at runtime, so decorators that read it with `[]`/`fetch` no longer fail. Needs a graphql_rails whose RSpec controller helpers have `response.context`; with an older one fields still run without a context
 * `TypeMatcher.new` takes an optional `graphql_context:` for the same purpose
 * `be_successful_graphql_request` accepts a record sharing the declared model's ActiveRecord `base_class`, at the top level and in nested fields, since an STI record is served as its own subclass and GraphQL serializes it with the declared type
 

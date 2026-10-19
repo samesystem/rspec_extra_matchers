@@ -676,6 +676,14 @@ RSpec.describe RSpecExtraMatchers::GraphqlMatchers::TypeMatcher do
         it { is_expected.to be_empty }
       end
 
+      context 'when the record is a subclass of the declared model' do
+        let(:matcher) { described_class.new(graphql_type, graphql_context: { name: 'John' }) }
+        let(:record) { Class.new(model_class).new }
+        let(:graphql_type) { model_class }
+
+        it { is_expected.to be_empty }
+      end
+
       context 'when the record is not a GraphqlRails model' do
         let(:matcher) { described_class.new(graphql_type, graphql_context: { name: 'John' }) }
         let(:graphql_type) do
