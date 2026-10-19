@@ -150,6 +150,7 @@ module RSpecExtraMatchers
 
       # Scalars without a class list, such as custom and date scalars, are checked through `coerce_result`.
       # The other built-in scalars keep one, since their `coerce_result` accepts almost any value.
+      # `ISO8601Date` is lenient too: it accepts anything whose `to_s` parses as a date, such as `20240101`.
       def fetch_compatible_classes(type:) # rubocop:disable Metrics/MethodLength
         inner_type = type.unwrap
         if inner_type <= GraphQL::Types::Int
@@ -264,15 +265,21 @@ module RSpecExtraMatchers
         end
       end
 
-      # GraphqlRails sets a model's query context for the duration of each field call
+      # GraphqlRails sets a model's query context for the duration of each field call, but only on the type it
+      # built for that model; graphql-ruby leaves it unset when the model sits behind another type.
       def with_graphql_context(&)
-        return yield if graphql_context.nil? || !value_parent.respond_to?(:with_graphql_context)
+        return yield if graphql_context.nil? || !graphql_rails_field?
 
         value_parent.with_graphql_context(graphql_context, &)
       end
 
-      # Not supported: resolver arguments (the method is called without any), a real query context,
-      # and `hash_key:`, which GraphQL checks before the resolver method.
+      def graphql_rails_field?
+        defined?(GraphqlRails::Model) && value_parent.is_a?(GraphqlRails::Model) &&
+          owner_type.equal?(value_parent.class.graphql.graphql_type)
+      end
+
+      # Not supported: resolver arguments (the method is called without any), a real query context (graphql-ruby
+      # types get `NullContext` by design), and `hash_key:`, which GraphQL checks before the resolver method.
       def type_resolver_value
         owner_type.send(:new, value_parent, GraphQL::Query::NullContext.instance).public_send(field.resolver_method)
       rescue NoMethodError => e

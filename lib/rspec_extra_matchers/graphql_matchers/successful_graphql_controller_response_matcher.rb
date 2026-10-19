@@ -133,7 +133,7 @@ module RSpecExtraMatchers
         controller_response.action_name
       end
 
-      # graphql_rails before Response#context gives no access to it
+      # Responses from graphql_rails versions without Response#context run fields without a query context
       def request_context
         controller_response.context if controller_response.respond_to?(:context)
       end

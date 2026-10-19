@@ -551,10 +551,24 @@ RSpec.describe RSpecExtraMatchers::GraphqlMatchers::TypeMatcher do
         it { is_expected.to be_empty }
       end
 
+      context 'when value is a DateTime' do
+        let(:record_params) { super().merge(changed_at: DateTime.new(2024, 1, 1, 12)) }
+
+        it { is_expected.to be_empty }
+      end
+
       context 'when value is a well-formatted String' do
         let(:record_params) { super().merge(changed_at: '2024-01-01T12:00:00+02:00') }
 
         it { is_expected.to be_empty }
+      end
+
+      context 'when value is a malformed String' do
+        let(:record_params) { super().merge(changed_at: 'yesterday') }
+
+        it 'returns error message' do
+          expect(error_messages.first).to start_with('Scalar "changedAt" field can not serialize value "yesterday":')
+        end
       end
 
       context 'when value can not be serialized' do
@@ -587,6 +601,12 @@ RSpec.describe RSpecExtraMatchers::GraphqlMatchers::TypeMatcher do
         it { is_expected.to be_empty }
       end
 
+      context 'when value is an Integer that parses as a date, which GraphQL serializes too' do
+        let(:record_params) { super().merge(born_on: 20_240_101) }
+
+        it { is_expected.to be_empty }
+      end
+
       context 'when value can not be serialized' do
         let(:record_params) { super().merge(born_on: 'someday') }
 
@@ -597,7 +617,8 @@ RSpec.describe RSpecExtraMatchers::GraphqlMatchers::TypeMatcher do
     end
 
     context 'when a GraphqlRails model field reads graphql_context' do
-      let(:record) do
+      let(:record) { model_class.new }
+      let(:model_class) do
         Class.new do
           include GraphqlRails::Model
 
@@ -609,7 +630,7 @@ RSpec.describe RSpecExtraMatchers::GraphqlMatchers::TypeMatcher do
           def name
             graphql_context.fetch(:name)
           end
-        end.new
+        end
       end
 
       let(:graphql_type) { record.class }
@@ -626,6 +647,58 @@ RSpec.describe RSpecExtraMatchers::GraphqlMatchers::TypeMatcher do
 
       context 'without a graphql_context' do
         it 'returns error message' do
+          expect(error_messages.first).to start_with('Method `name` for "name" field raised an error')
+        end
+      end
+
+      context 'when a nested list item reads graphql_context' do
+        let(:matcher) { described_class.new(graphql_type, graphql_context: { name: 'John' }) }
+        let(:record) { parent_class.new(model_class.new) }
+        let(:graphql_type) { parent_class }
+        let(:parent_class) do
+          child_list_type = model_class.graphql.graphql_type.to_non_null_type.to_list_type.to_non_null_type
+          Class.new do
+            include GraphqlRails::Model
+
+            graphql do |c|
+              c.name("DummyContextParent#{rand(10**9)}")
+              c.attribute(:children).type(child_list_type)
+            end
+
+            def initialize(child)
+              @child = child
+            end
+
+            def children = [@child]
+          end
+        end
+
+        it { is_expected.to be_empty }
+      end
+
+      context 'when the record is not a GraphqlRails model' do
+        let(:matcher) { described_class.new(graphql_type, graphql_context: { name: 'John' }) }
+        let(:graphql_type) do
+          Class.new(GraphQL::Schema::Object) do
+            graphql_name "DummyPlainUser#{rand(10**9)}"
+            field :name, String, null: false
+          end
+        end
+        let(:record) { Struct.new(:name).new('John') }
+
+        it { is_expected.to be_empty }
+      end
+
+      context 'when the model sits behind a plain GraphQL type' do
+        let(:matcher) { described_class.new(graphql_type, graphql_context: { name: 'John' }) }
+        let(:graphql_type) do
+          Class.new(GraphQL::Schema::Object) do
+            graphql_name "DummyPlainUser#{rand(10**9)}"
+            field :name, String, null: false
+          end
+        end
+
+        it 'returns error message, since graphql-ruby leaves graphql_context unset' do
           expect(error_messages.first).to start_with('Method `name` for "name" field raised an error')
         end
       end
