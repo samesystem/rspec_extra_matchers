@@ -66,6 +66,51 @@ RSpec.describe RSpecExtraMatchers::GraphqlMatchers::ValidGraphqlDecoratorMatcher
       end
     end
 
+    context 'when graphql field has an STI GraphqlRails::Model type' do
+      let(:sti_base) do
+        base = Class.new { def id = '123' }
+        base.define_singleton_method(:base_class) { base }
+        base
+      end
+
+      let(:graphql_decorator_organization) do
+        Class.new(sti_base) do
+          include GraphqlRails::Model
+
+          def self.name = @name ||= "DummyOrganization#{rand(10**10)}"
+
+          graphql do |c|
+            c.attribute(:id).type('ID!')
+          end
+        end
+      end
+
+      context 'when value is its STI sibling' do
+        let(:organization) { Class.new(sti_base).new }
+
+        it { is_expected.to be_empty }
+      end
+
+      context 'when value has another base class' do
+        let(:other_record_class) do
+          base = Class.new do
+            def self.name = 'OtherRecord'
+            def id = '123'
+          end
+          base.define_singleton_method(:base_class) { base }
+          base
+        end
+        let(:organization) { other_record_class.new }
+
+        it 'returns error message' do
+          expect(error_messages).to contain_exactly(
+            "According to graphql configuration, #{organization.inspect} should be an " \
+            "instance of #{graphql_decorator_organization.name}, but it is OtherRecord"
+          )
+        end
+      end
+    end
+
     context 'when graphql field has GraphqlRails::Model type, but value is not a GraphqlRails::Model' do
       let(:record_params) { super().merge(organization: 'not_a_model') }
 
