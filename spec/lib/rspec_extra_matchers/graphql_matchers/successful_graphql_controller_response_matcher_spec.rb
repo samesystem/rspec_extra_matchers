@@ -215,6 +215,42 @@ RSpec.describe RSpecExtraMatchers::GraphqlMatchers::SuccessfulGraphqlControllerR
 
       it { is_expected.to be_falsey }
     end
+
+    context 'when the declared model is an STI class' do
+      let(:sti_base) do
+        base = Class.new { def id = '123' }
+        base.define_singleton_method(:base_class) { base }
+        base
+      end
+
+      let(:action_response_type) do
+        Class.new(sti_base) do
+          include GraphqlRails::Model
+
+          graphql do |c|
+            c.name("DummyUser#{rand(10**9)}")
+            c.attribute(:id).type('ID!')
+          end
+        end
+      end
+
+      context 'when result items are its STI siblings and base class' do
+        let(:response_result) { [Class.new(sti_base).new, sti_base.new] }
+
+        it { is_expected.to be_truthy }
+      end
+
+      context 'when a result item has another base class' do
+        let(:other_record_class) do
+          base = Class.new { def id = '123' }
+          base.define_singleton_method(:base_class) { base }
+          base
+        end
+        let(:response_result) { [other_record_class.new] }
+
+        it { is_expected.to be_falsey }
+      end
+    end
   end
 
   describe '#description' do

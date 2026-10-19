@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+* `be_successful_graphql_request` accepts a record sharing the declared model's ActiveRecord `base_class`, at the top level and in nested fields, since an STI record is served as its own subclass and GraphQL serializes it with the declared type
+
 ## [1.0.0] - 2026-10-14
 
 ### Fixed

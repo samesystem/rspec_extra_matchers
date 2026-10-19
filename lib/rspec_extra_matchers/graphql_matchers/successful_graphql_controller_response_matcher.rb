@@ -2,6 +2,7 @@
 
 require 'active_support/core_ext/string/indent'
 
+require_relative 'graphql_model_instance'
 require_relative 'type_matcher'
 
 module RSpecExtraMatchers
@@ -68,7 +69,7 @@ module RSpecExtraMatchers
       def validate_graphql_model_matching
         return true if action_response_graphql_model.nil?
 
-        mismatching_item = result_items.compact.find { !_1.is_a?(action_response_graphql_model) }
+        mismatching_item = result_items.compact.find { !GraphqlModelInstance.call(_1, action_response_graphql_model) }
         return true if mismatching_item.nil?
 
         add_error(

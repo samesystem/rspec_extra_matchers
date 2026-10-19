@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require_relative 'graphql_model_instance'
 require_relative 'union_type_resolver'
 
 module RSpecExtraMatchers
@@ -76,7 +77,7 @@ module RSpecExtraMatchers
 
       def assert_graphql_rails_model
         graphql_model = graphql_rails_attribute.graphql_model
-        return if value.is_a?(graphql_model)
+        return if GraphqlModelInstance.call(value, graphql_model)
 
         expected_type = graphql_model.name.presence || graphql_model.to_s
         actual_type = value.class.name
