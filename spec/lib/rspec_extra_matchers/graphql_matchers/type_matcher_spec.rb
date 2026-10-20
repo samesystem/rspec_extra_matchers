@@ -530,6 +530,245 @@ RSpec.describe RSpecExtraMatchers::GraphqlMatchers::TypeMatcher do
       end
     end
 
+    context 'with date time type' do
+      let(:graphql_type) do
+        Class.new(super()) do
+          graphql.attribute(:changed_at).type('DateTime!')
+        end
+      end
+
+      let(:record_class) { Struct.new(:id, :name, :location, :changed_at, keyword_init: true) }
+
+      context 'when value is a Time' do
+        let(:record_params) { super().merge(changed_at: Time.new(2024, 1, 1, 12)) }
+
+        it { is_expected.to be_empty }
+      end
+
+      context 'when value is a Date' do
+        let(:record_params) { super().merge(changed_at: Date.new(2024, 1, 1)) }
+
+        it { is_expected.to be_empty }
+      end
+
+      context 'when value is a DateTime' do
+        let(:record_params) { super().merge(changed_at: DateTime.new(2024, 1, 1, 12)) }
+
+        it { is_expected.to be_empty }
+      end
+
+      context 'when value is a well-formatted String' do
+        let(:record_params) { super().merge(changed_at: '2024-01-01T12:00:00+02:00') }
+
+        it { is_expected.to be_empty }
+      end
+
+      context 'when value is a malformed String' do
+        let(:record_params) { super().merge(changed_at: 'yesterday') }
+
+        it 'returns error message' do
+          expect(error_messages.first).to start_with('Scalar "changedAt" field can not serialize value "yesterday":')
+        end
+      end
+
+      context 'when value can not be serialized' do
+        let(:record_params) { super().merge(changed_at: 1_704_103_200) }
+
+        it 'returns error message' do
+          expect(error_messages.first).to start_with('Scalar "changedAt" field can not serialize value 1704103200:')
+        end
+      end
+    end
+
+    context 'with date type' do
+      let(:graphql_type) do
+        Class.new(super()) do
+          graphql.attribute(:born_on).type('Date!')
+        end
+      end
+
+      let(:record_class) { Struct.new(:id, :name, :location, :born_on, keyword_init: true) }
+
+      context 'when value is a Date' do
+        let(:record_params) { super().merge(born_on: Date.new(2024, 1, 1)) }
+
+        it { is_expected.to be_empty }
+      end
+
+      context 'when value is a Time' do
+        let(:record_params) { super().merge(born_on: Time.new(2024, 1, 1, 12)) }
+
+        it { is_expected.to be_empty }
+      end
+
+      context 'when value is an Integer that parses as a date, which GraphQL serializes too' do
+        let(:record_params) { super().merge(born_on: 20_240_101) }
+
+        it { is_expected.to be_empty }
+      end
+
+      context 'when value can not be serialized' do
+        let(:record_params) { super().merge(born_on: 'someday') }
+
+        it 'returns error message' do
+          expect(error_messages.first).to start_with('Scalar "bornOn" field can not serialize value "someday":')
+        end
+      end
+    end
+
+    context 'when a GraphqlRails model field reads graphql_context' do
+      let(:record) { model_class.new }
+      let(:model_class) do
+        Class.new do
+          include GraphqlRails::Model
+
+          graphql do |c|
+            c.name("DummyContextUser#{rand(10**9)}")
+            c.attribute(:name).type('String!')
+          end
+
+          def name
+            graphql_context.fetch(:name)
+          end
+        end
+      end
+
+      let(:graphql_type) { record.class }
+
+      context 'with a graphql_context' do
+        let(:matcher) { described_class.new(graphql_type, graphql_context: { name: 'John' }) }
+
+        it { is_expected.to be_empty }
+
+        it 'unsets the context afterwards, as GraphqlRails does' do
+          expect(record.graphql_context).to be_nil
+        end
+      end
+
+      context 'without a graphql_context' do
+        it 'returns error message' do
+          expect(error_messages.first).to start_with('Method `name` for "name" field raised an error')
+        end
+      end
+
+      context 'when a nested list item reads graphql_context' do
+        let(:matcher) { described_class.new(graphql_type, graphql_context: { name: 'John' }) }
+        let(:record) { parent_class.new(model_class.new) }
+        let(:graphql_type) { parent_class }
+        let(:parent_class) do
+          child_list_type = model_class.graphql.graphql_type.to_non_null_type.to_list_type.to_non_null_type
+          Class.new do
+            include GraphqlRails::Model
+
+            graphql do |c|
+              c.name("DummyContextParent#{rand(10**9)}")
+              c.attribute(:children).type(child_list_type)
+            end
+
+            def initialize(child)
+              @child = child
+            end
+
+            def children = [@child]
+          end
+        end
+
+        it { is_expected.to be_empty }
+      end
+
+      context 'when the model is reached through an interface field' do
+        let(:matcher) { described_class.new(graphql_type, graphql_context: { name: 'John' }) }
+        let(:record) { owner_class.new(model_class.new) }
+        let(:graphql_type) { owner_class }
+        let(:interface) do
+          Module.new do
+            include GraphQL::Schema::Interface
+
+            graphql_name "DummyNamed#{rand(10**9)}"
+            field :name, String, null: false
+          end
+        end
+        let(:model_class) do
+          named_interface = interface
+          Class.new do
+            include GraphqlRails::Model
+
+            graphql do |c|
+              c.name("DummyContextPet#{rand(10**9)}")
+              c.implements(named_interface)
+              c.attribute(:name).type('String!')
+            end
+
+            def name
+              graphql_context.fetch(:name)
+            end
+          end
+        end
+        let(:owner_class) do
+          named_interface = interface
+          Class.new do
+            include GraphqlRails::Model
+
+            graphql do |c|
+              c.name("DummyContextOwner#{rand(10**9)}")
+              c.attribute(:pet).type(named_interface.to_non_null_type)
+            end
+
+            def initialize(pet)
+              @pet = pet
+            end
+
+            attr_reader :pet
+          end
+        end
+
+        it { is_expected.to be_empty }
+      end
+
+      context 'when the record is not a GraphqlRails model but its type is' do
+        let(:matcher) { described_class.new(graphql_type, graphql_context: { name: 'John' }) }
+        let(:record) { Struct.new(:name).new('John') }
+        let(:graphql_type) { model_class }
+
+        it { is_expected.to be_empty }
+      end
+
+      context 'when the record is a subclass of the declared model' do
+        let(:matcher) { described_class.new(graphql_type, graphql_context: { name: 'John' }) }
+        let(:record) { Class.new(model_class).new }
+        let(:graphql_type) { model_class }
+
+        it { is_expected.to be_empty }
+      end
+
+      context 'when the record is not a GraphqlRails model' do
+        let(:matcher) { described_class.new(graphql_type, graphql_context: { name: 'John' }) }
+        let(:graphql_type) do
+          Class.new(GraphQL::Schema::Object) do
+            graphql_name "DummyPlainUser#{rand(10**9)}"
+            field :name, String, null: false
+          end
+        end
+        let(:record) { Struct.new(:name).new('John') }
+
+        it { is_expected.to be_empty }
+      end
+
+      context 'when the model sits behind a plain GraphQL type' do
+        let(:matcher) { described_class.new(graphql_type, graphql_context: { name: 'John' }) }
+        let(:graphql_type) do
+          Class.new(GraphQL::Schema::Object) do
+            graphql_name "DummyPlainUser#{rand(10**9)}"
+            field :name, String, null: false
+          end
+        end
+
+        it 'returns error message, since graphql-ruby leaves graphql_context unset' do
+          expect(error_messages.first).to start_with('Method `name` for "name" field raised an error')
+        end
+      end
+    end
+
     context 'with union type' do
       let(:matcher) { super().tap(&:deeply) }
 

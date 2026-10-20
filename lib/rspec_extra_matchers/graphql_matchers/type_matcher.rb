@@ -34,8 +34,9 @@ module RSpecExtraMatchers
 
       attr_reader :detailed_error_messages, :graphql_type, :record
 
-      def initialize(graphql_type_or_model, deeply: true, strictly: true)
+      def initialize(graphql_type_or_model, deeply: true, strictly: true, graphql_context: nil)
         @detailed_error_messages = []
+        @graphql_context = graphql_context
         @deeply = deeply
         @strictly = strictly
         @graphql_type = extract_graphql_type(graphql_type_or_model)
@@ -79,6 +80,8 @@ module RSpecExtraMatchers
 
       private
 
+      attr_reader :graphql_context
+
       def assert_deeply?(value)
         @deeply && !checked_records.include?(value)
       end
@@ -120,7 +123,8 @@ module RSpecExtraMatchers
           field_name: graphql_type.unwrap.graphql_name,
           deeply: deeply?,
           property: 'value',
-          strictly: strict?
+          strictly: strict?,
+          graphql_context:
         ).call
       end
 
@@ -137,7 +141,7 @@ module RSpecExtraMatchers
         nil
       end
 
-      def assert_field(field, owner_type:)
+      def assert_field(field, owner_type:) # rubocop:disable Metrics/MethodLength
         @detailed_error_messages += AssertTypeAndValue.new(
           type: field.type,
           value_parent: record,
@@ -146,7 +150,8 @@ module RSpecExtraMatchers
           property: field.method_str,
           strictly: strict?,
           field:,
-          owner_type:
+          owner_type:,
+          graphql_context:
         ).call
       end
 
