@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+* `with_arguments` on `satisfy_graphql_type`, `be_valid_graphql_type_for` and `be_valid_graphql_decorator` calls fields with the given arguments, keyed by field path in Ruby or GraphQL naming: `with_arguments(user: { id: 1 }, 'user.posts': { first: 2 })`. Argument default values are filled in as GraphQL does
+
+### Fixed
+
+* A field with a required argument and no default reports `Field "user" requires arguments id, pass them with `with_arguments`` instead of the `ArgumentError` from calling its method without arguments
+
 ## [1.1.0] - 2026-10-20
 
 ### Added

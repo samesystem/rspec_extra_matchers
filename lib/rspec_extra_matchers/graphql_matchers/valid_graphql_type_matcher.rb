@@ -14,7 +14,7 @@ module RSpecExtraMatchers
       attr_reader :record
 
       def initialize(record)
-        @type_matcher_options = { deeply: false, strictly: false }
+        @type_matcher_options = { deeply: false, strictly: false, field_arguments: {} }
         @record = record
       end
 
@@ -43,6 +43,14 @@ module RSpecExtraMatchers
 
       def loosely
         @type_matcher_options = @type_matcher_options.merge(strictly: false)
+        self
+      end
+
+      # Arguments to call fields with, keyed by field path:
+      # `with_arguments(user: { id: 1 }, 'user.posts': { first: 2 })`
+      def with_arguments(arguments)
+        field_arguments = @type_matcher_options[:field_arguments].merge(arguments)
+        @type_matcher_options = @type_matcher_options.merge(field_arguments:)
         self
       end
 
