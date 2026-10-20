@@ -2,6 +2,7 @@
 
 require 'rspec_extra_matchers/graphql_matchers/successful_graphql_controller_response_matcher'
 require 'graphql_rails'
+require 'graphql_rails/rspec_controller_helpers'
 
 RSpec.describe RSpecExtraMatchers::GraphqlMatchers::SuccessfulGraphqlControllerResponseMatcher do
   subject(:matcher) { described_class.new }
@@ -236,6 +237,25 @@ RSpec.describe RSpecExtraMatchers::GraphqlMatchers::SuccessfulGraphqlControllerR
       context 'when the response has no request context' do
         it { is_expected.to be_falsey }
       end
+    end
+
+    context 'when a result field digs into the GraphqlRails test context' do
+      let(:action_response_type) do
+        Class.new(super()) do
+          def id
+            graphql_context&.dig(:current_user, :id)
+          end
+        end
+      end
+
+      before do
+        context = GraphqlRails::RSpecControllerHelpers::FakeContext.new(
+          values: { current_user: { id: '1' } }, schema: nil
+        )
+        allow(controller_response).to receive(:context).and_return(context)
+      end
+
+      it { is_expected.to be_truthy }
     end
 
     context 'when the declared model is an STI class' do
