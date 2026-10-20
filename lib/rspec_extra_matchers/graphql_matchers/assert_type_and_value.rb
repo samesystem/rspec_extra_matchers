@@ -116,7 +116,19 @@ module RSpecExtraMatchers
         return [] if field.nil? || (value_parent.is_a?(Hash) && !type_resolver?)
 
         field.arguments.each_value.filter_map do |argument|
-          argument.keyword if argument.type.non_null? && !arguments.key?(argument.keyword)
+          argument.keyword if required_argument?(argument) && !arguments.key?(argument.keyword)
+        end
+      end
+
+      def required_argument?(argument)
+        argument.type.non_null? || required_nullable_keywords.include?(argument.keyword)
+      end
+
+      # `required: :nullable` keeps the argument's type nullable and adds a required validator to its field
+      def required_nullable_keywords
+        field.validators.grep(GraphQL::Schema::Validator::RequiredValidator).flat_map do |validator|
+          one_of = validator.instance_variable_get(:@one_of)
+          one_of.size == 1 ? Array(one_of.first) : []
         end
       end
 
