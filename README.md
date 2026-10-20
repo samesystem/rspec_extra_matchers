@@ -99,7 +99,9 @@ end
 
 ### `be_successful_graphql_request` matcher
 
-Works with GraphqlRails only. Checks if controller response matches what is defined in action configuration
+Works with GraphqlRails only. Checks if controller response matches what is defined in action configuration.
+A result passes as a GraphqlRails model when it is an instance of it or responds to every attribute of it,
+because GraphqlRails resolves attributes with `send`.
 
 ```ruby
 class Graphql::UsersController

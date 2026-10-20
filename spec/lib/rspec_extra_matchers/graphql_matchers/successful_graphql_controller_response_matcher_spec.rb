@@ -282,9 +282,9 @@ RSpec.describe RSpecExtraMatchers::GraphqlMatchers::SuccessfulGraphqlControllerR
         it { is_expected.to be_truthy }
       end
 
-      context 'when a result item has another base class' do
+      context 'when a result item has another base class and lacks an attribute method' do
         let(:other_record_class) do
-          base = Class.new { def id = '123' }
+          base = Class.new
           base.define_singleton_method(:base_class) { base }
           base
         end
@@ -292,6 +292,12 @@ RSpec.describe RSpecExtraMatchers::GraphqlMatchers::SuccessfulGraphqlControllerR
 
         it { is_expected.to be_falsey }
       end
+    end
+
+    context 'when result items are not instances of the declared model but respond to its attributes' do
+      let(:response_result) { [Struct.new(:id).new('123')] }
+
+      it { is_expected.to be_truthy }
     end
   end
 

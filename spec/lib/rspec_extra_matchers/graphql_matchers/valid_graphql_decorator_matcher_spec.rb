@@ -91,11 +91,10 @@ RSpec.describe RSpecExtraMatchers::GraphqlMatchers::ValidGraphqlDecoratorMatcher
         it { is_expected.to be_empty }
       end
 
-      context 'when value has another base class' do
+      context 'when value has another base class and lacks an attribute method' do
         let(:other_record_class) do
           base = Class.new do
             def self.name = 'OtherRecord'
-            def id = '123'
           end
           base.define_singleton_method(:base_class) { base }
           base
@@ -109,6 +108,47 @@ RSpec.describe RSpecExtraMatchers::GraphqlMatchers::ValidGraphqlDecoratorMatcher
           )
         end
       end
+    end
+
+    context 'when graphql field value is not a GraphqlRails::Model but responds to its attributes' do
+      let(:organization) { Struct.new(:id).new('123') }
+
+      it { is_expected.to be_empty }
+    end
+
+    context 'when graphql field value answers an attribute only through a private Kernel method' do
+      let(:graphql_decorator_organization) do
+        Class.new do
+          include GraphqlRails::Model
+
+          def self.name = @name ||= "DummyOrganization#{rand(10**9)}"
+
+          graphql do |c|
+            c.attribute(:format).type('String!')
+          end
+
+          def format = 'pdf'
+        end
+      end
+      let(:organization) { Object.new }
+
+      it 'returns error message' do
+        expect(error_messages).to contain_exactly(
+          "According to graphql configuration, #{organization.inspect} should be an " \
+          "instance of #{graphql_decorator_organization.name}, but it is Object"
+        )
+      end
+    end
+
+    context 'when graphql field value answers an attribute through method_missing and respond_to?' do
+      let(:organization) do
+        Class.new do
+          def respond_to?(name, include_private = false) = name.to_sym == :id || super
+          def method_missing(name, *) = name == :id ? '123' : super # rubocop:disable Style/MissingRespondToMissing
+        end.new
+      end
+
+      it { is_expected.to be_empty }
     end
 
     context 'when graphql field has GraphqlRails::Model type, but value is not a GraphqlRails::Model' do
