@@ -981,6 +981,33 @@ RSpec.describe RSpecExtraMatchers::GraphqlMatchers::TypeMatcher do
           it { is_expected.to be_empty }
         end
 
+        context 'when the argument is required but nullable' do
+          let(:graphql_type) do
+            Class.new(GraphQL::Schema::Object) do
+              graphql_name "DummyHashGreeter#{rand(10**9)}"
+
+              field :greeting_for, String, null: false do
+                argument :name, String, required: :nullable
+              end
+
+              def greeting_for(name:) = "Hi #{name}"
+            end
+          end
+
+          context 'without arguments' do
+            it 'returns error message' do
+              expect(error_messages)
+                .to eq(['Field "greetingFor" requires arguments name, pass them with `with_arguments`'])
+            end
+          end
+
+          context 'with a nil argument' do
+            let(:matcher) { described_class.new(graphql_type).with_arguments(greeting_for: { name: nil }) }
+
+            it { is_expected.to be_empty }
+          end
+        end
+
         context 'when arguments are given in several calls' do
           let(:matcher) do
             described_class.new(graphql_type)

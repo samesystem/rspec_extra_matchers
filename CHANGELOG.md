@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.1] - 2026-10-20
+
+### Fixed
+
+* A field with an argument declared `required: :nullable` and left out reports ``Field "user" requires arguments id, pass them with `with_arguments` `` instead of the `ArgumentError` from calling its method without it. Such an argument may be passed as `nil`
+
 ## [1.2.0] - 2026-10-20
 
 ### Added
