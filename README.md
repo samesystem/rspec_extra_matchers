@@ -97,6 +97,39 @@ describe Graphql::UserDecorator do
 end
 ```
 
+### Fields with arguments
+
+The matchers call every field method with only the default values of its arguments. A field with a required argument
+needs them given with `with_arguments`, keyed by field path. Paths take Ruby or GraphQL names, and list indexes are left
+out. Argument names are the Ruby keywords the method takes (`post_id`, not `postId`):
+
+```ruby
+class Graphql::UserDecorator
+  include GraphqlRails::Model
+
+  graphql do |c|
+    c.attribute(:post).type('Post!').permit(id: 'ID!')
+  end
+
+  def initialize(user)
+    @user = user
+  end
+
+  def post(id:)
+    @user.posts.find(id)
+  end
+end
+
+it 'valid type for user' do
+  expect(user_decorator).to be_valid_graphql_decorator.deeply.with_arguments(post: { id: post.id })
+end
+```
+
+`with_arguments` also works on `satisfy_graphql_type`, `be_valid_graphql_type_for` and
+`be_successful_graphql_request`. Default values are passed as they are declared, without the input coercion and
+`prepare:` GraphQL applies, so they fit scalar arguments best. Arguments that field extensions consume, such as the
+`first`, `last`, `before` and `after` of connections, are not supported.
+
 ### `be_successful_graphql_request` matcher
 
 Works with GraphqlRails only. Checks if controller response matches what is defined in action configuration

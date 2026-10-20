@@ -2,6 +2,7 @@
 
 require 'active_support/core_ext/string/indent'
 
+require_relative 'field_arguments'
 require_relative 'graphql_model_instance'
 require_relative 'type_matcher'
 
@@ -25,9 +26,19 @@ module RSpecExtraMatchers
         'be a successful GraphQL request returning the declared type'
       end
 
+      # Arguments to call fields with, keyed by field path: `with_arguments(user: { id: 1 })`
+      def with_arguments(arguments)
+        @field_arguments = FieldArguments.merge(field_arguments, arguments)
+        self
+      end
+
       private
 
       attr_reader :controller_response, :error_message
+
+      def field_arguments
+        @field_arguments || {}
+      end
 
       def validate_response_status
         return true if controller_response.success?
@@ -93,7 +104,8 @@ module RSpecExtraMatchers
         return item_nullability_error_messages if item.nil?
 
         matcher = TypeMatcher.new(
-          action_response_graphql_type.unwrap, deeply: false, strictly: false, graphql_context: request_context
+          action_response_graphql_type.unwrap,
+          deeply: false, strictly: false, graphql_context: request_context, field_arguments:
         )
         matcher.matches?(item)
         matcher.error_messages

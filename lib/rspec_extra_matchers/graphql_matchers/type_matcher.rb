@@ -6,6 +6,7 @@
 
 require 'rspec/matchers/composable'
 require_relative 'assert_type_and_value'
+require_relative 'field_arguments'
 require_relative 'union_type_resolver'
 
 module RSpecExtraMatchers
@@ -29,14 +30,16 @@ module RSpecExtraMatchers
         not_a_graphql_type: 'Expected a GraphQL type, but got %<graphql_type>s',
         graphql_rails_type_mismatch: 'According to graphql configuration, %<value>s should be an instance of %<expected_type>s, but it is %<actual_type>s',
         wrong_scalar_value: 'Scalar "%<field_name>s" field can not serialize value %<value>s: %<error>s',
-        unresolved_union_type: 'Could not resolve union type %<union>s for "%<field_name>s" field value %<value>s'
+        unresolved_union_type: 'Could not resolve union type %<union>s for "%<field_name>s" field value %<value>s',
+        missing_arguments: 'Field "%<field_name>s" requires arguments %<arguments>s, pass them with `with_arguments`'
       }.freeze
 
       attr_reader :detailed_error_messages, :graphql_type, :record
 
-      def initialize(graphql_type_or_model, deeply: true, strictly: true, graphql_context: nil)
+      def initialize(graphql_type_or_model, deeply: true, strictly: true, graphql_context: nil, field_arguments: {})
         @detailed_error_messages = []
         @graphql_context = graphql_context
+        @field_arguments = field_arguments
         @deeply = deeply
         @strictly = strictly
         @graphql_type = extract_graphql_type(graphql_type_or_model)
@@ -65,6 +68,13 @@ module RSpecExtraMatchers
         @strictly = false
       end
 
+      # Arguments to call fields with, keyed by field path:
+      # `with_arguments(user: { id: 1 }, 'user.posts': { status: 'draft' })`
+      def with_arguments(arguments)
+        @field_arguments = FieldArguments.merge(field_arguments, arguments)
+        self
+      end
+
       def failure_message
         message = "Expected #{@record} to match #{graphql_type}, but it didn't:\n"
         message + error_messages.take(5).join("\n").indent(2)
@@ -80,7 +90,7 @@ module RSpecExtraMatchers
 
       private
 
-      attr_reader :graphql_context
+      attr_reader :graphql_context, :field_arguments
 
       def assert_deeply?(value)
         @deeply && !checked_records.include?(value)
@@ -151,7 +161,8 @@ module RSpecExtraMatchers
           strictly: strict?,
           field:,
           owner_type:,
-          graphql_context:
+          graphql_context:,
+          field_arguments:
         ).call
       end
 

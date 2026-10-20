@@ -111,6 +111,40 @@ RSpec.describe RSpecExtraMatchers::GraphqlMatchers::ValidGraphqlDecoratorMatcher
       end
     end
 
+    context 'when graphql field takes arguments' do
+      let(:graphql_decorator) do
+        Class.new(super()) do
+          graphql.attribute(:greeting_for).type('String!').permit(name: 'String!')
+
+          def greeting_for(name:) = "Hi #{name}"
+        end
+      end
+
+      context 'without arguments' do
+        it 'returns error message' do
+          expect(error_messages)
+            .to eq(['Field "greetingFor" requires arguments name, pass them with `with_arguments`'])
+        end
+      end
+
+      context 'with arguments' do
+        let(:matcher) { described_class.new.with_arguments(greeting_for: { name: 'John' }) }
+
+        it { is_expected.to be_empty }
+      end
+
+      context 'with arguments given in several calls' do
+        let(:matcher) do
+          described_class.new
+            .with_arguments(greeting_for: { name: 'John' })
+            .deeply
+            .with_arguments(other_field: { id: 1 })
+        end
+
+        it { is_expected.to be_empty }
+      end
+    end
+
     context 'when graphql field has GraphqlRails::Model type, but value is not a GraphqlRails::Model' do
       let(:record_params) { super().merge(organization: 'not_a_model') }
 

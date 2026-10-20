@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require_relative 'field_arguments'
 require_relative 'graphql_model_instance'
 require_relative 'union_type_resolver'
 
@@ -11,7 +12,7 @@ module RSpecExtraMatchers
       MissingFieldError = Class.new(StandardError)
 
       def initialize(type:, value_parent:, deeply:, strictly:, field_name: nil, checked_records: Set.new, property: nil, # rubocop:disable Metrics/ParameterLists, Metrics/MethodLength
-                     field: nil, owner_type: nil, graphql_context: nil)
+                     field: nil, owner_type: nil, graphql_context: nil, field_arguments: {})
         @value_parent = value_parent
         @deeply = deeply
         @strictly = strictly
@@ -23,6 +24,7 @@ module RSpecExtraMatchers
         @field = field
         @owner_type = owner_type
         @graphql_context = graphql_context
+        @field_arguments = field_arguments
       end
 
       def call
@@ -34,10 +36,11 @@ module RSpecExtraMatchers
       private
 
       attr_reader :detailed_error_messages, :type, :checked_records, :value_parent, :field_name, :property, :field,
-                  :owner_type, :graphql_context
+                  :owner_type, :graphql_context, :field_arguments
 
       def assert_type_and_value # rubocop:disable Metrics/AbcSize
         return add_missing_method_error unless parent_method_exist?
+        return add_missing_arguments_error if missing_arguments.any?
 
         return assert_nullable if value.nil?
         return assert_list if list_value?
@@ -102,6 +105,32 @@ module RSpecExtraMatchers
 
       def add_missing_method_error
         add_error(:missing_field, property:, record: value_parent.inspect)
+      end
+
+      def add_missing_arguments_error
+        add_error(:missing_arguments, arguments: missing_arguments.join(', '))
+      end
+
+      # A Hash value is looked up by key, so its arguments are never used
+      def missing_arguments
+        return [] if field.nil? || (value_parent.is_a?(Hash) && !type_resolver?)
+
+        field.arguments.each_value.filter_map do |argument|
+          argument.keyword if argument.type.non_null? && !arguments.key?(argument.keyword)
+        end
+      end
+
+      def arguments
+        @arguments ||= default_arguments.merge(FieldArguments.call(field_arguments, field_name))
+      end
+
+      # GraphQL passes an argument's default value when the query leaves it out
+      def default_arguments
+        return {} if field.nil?
+
+        field.arguments.each_value.select(&:default_value?).to_h do |argument|
+          [argument.keyword, argument.default_value]
+        end
       end
 
       def assert_nullable
@@ -215,7 +244,8 @@ module RSpecExtraMatchers
           property: field.method_str,
           field:,
           owner_type:,
-          graphql_context:
+          graphql_context:,
+          field_arguments:
         ).call
 
         @detailed_error_messages += errors
@@ -255,7 +285,7 @@ module RSpecExtraMatchers
           elsif value_parent.is_a?(Hash)
             hash_value
           else
-            with_graphql_context { value_parent.send(property) }
+            with_graphql_context { value_parent.send(property, **arguments) }
           end
       rescue MissingFieldError
         raise
@@ -283,10 +313,12 @@ module RSpecExtraMatchers
         owner_type.is_a?(Class) ? owner_type : value_parent.class.graphql.graphql_type
       end
 
-      # Not supported: resolver arguments (the method is called without any), a real query context (graphql-ruby
-      # types get `NullContext` by design), and `hash_key:`, which GraphQL checks before the resolver method.
+      # Not supported: a real query context (graphql-ruby types get `NullContext` by design),
+      # and `hash_key:`, which GraphQL checks before the resolver method.
       def type_resolver_value
-        owner_type.send(:new, value_parent, GraphQL::Query::NullContext.instance).public_send(field.resolver_method)
+        owner_type
+          .send(:new, value_parent, GraphQL::Query::NullContext.instance)
+          .public_send(field.resolver_method, **arguments)
       rescue NoMethodError => e
         # GraphqlRails resolvers call the attribute method on the Hash itself
         raise MissingFieldError if missing_on_hash?(e)
