@@ -812,6 +812,74 @@ RSpec.describe RSpecExtraMatchers::GraphqlMatchers::TypeMatcher do
         it { is_expected.to be_empty }
       end
 
+      context 'when several required arguments are missing' do
+        let(:model_class) do
+          Class.new do
+            include GraphqlRails::Model
+
+            graphql do |c|
+              c.name("DummyGreeter#{rand(10**9)}")
+              c.attribute(:greeting_for).type('String!').permit(name: 'String!', title: 'String!')
+            end
+
+            def greeting_for(name:, title:) = "Hi #{title} #{name}"
+          end
+        end
+
+        it 'returns error message' do
+          expect(error_messages)
+            .to eq(['Field "greetingFor" requires arguments name, title, pass them with `with_arguments`'])
+        end
+      end
+
+      context 'when the argument name differs in Ruby and GraphQL' do
+        let(:model_class) do
+          Class.new do
+            include GraphqlRails::Model
+
+            graphql do |c|
+              c.name("DummyGreeter#{rand(10**9)}")
+              c.attribute(:greeting_for).type('String!').permit(user_id: 'ID!')
+            end
+
+            def greeting_for(user_id:) = "Hi #{user_id}"
+          end
+        end
+
+        context 'with the Ruby keyword' do
+          let(:matcher) { described_class.new(graphql_type).with_arguments(greeting_for: { user_id: 1 }) }
+
+          it { is_expected.to be_empty }
+        end
+
+        context 'with the GraphQL name' do
+          let(:matcher) { described_class.new(graphql_type).with_arguments(greeting_for: { 'userId' => 1 }) }
+
+          it 'returns error message' do
+            expect(error_messages)
+              .to eq(['Field "greetingFor" requires arguments user_id, pass them with `with_arguments`'])
+          end
+        end
+      end
+
+      context 'when the field is a predicate' do
+        let(:matcher) { described_class.new(graphql_type).with_arguments('greets?': { name: 'John' }) }
+        let(:model_class) do
+          Class.new do
+            include GraphqlRails::Model
+
+            graphql do |c|
+              c.name("DummyGreeter#{rand(10**9)}")
+              c.attribute(:greets?).type('Boolean!').permit(name: 'String!')
+            end
+
+            def greets?(name:) = !name.empty?
+          end
+        end
+
+        it { is_expected.to be_empty }
+      end
+
       context 'when the field returns the wrong type for the given arguments' do
         let(:matcher) { described_class.new(graphql_type).with_arguments(greeting_for: { name: 'John' }) }
         let(:model_class) do
@@ -913,6 +981,16 @@ RSpec.describe RSpecExtraMatchers::GraphqlMatchers::TypeMatcher do
           it { is_expected.to be_empty }
         end
 
+        context 'when arguments are given in several calls' do
+          let(:matcher) do
+            described_class.new(graphql_type)
+              .with_arguments(greeting_for: { name: 'John' })
+              .with_arguments(other_field: { id: 1 })
+          end
+
+          it { is_expected.to be_empty }
+        end
+
         context 'when the field name is not camelized' do
           let(:matcher) { described_class.new(graphql_type).with_arguments(greeting_for: { name: 'John' }) }
           let(:graphql_type) do
@@ -929,6 +1007,69 @@ RSpec.describe RSpecExtraMatchers::GraphqlMatchers::TypeMatcher do
 
           it { is_expected.to be_empty }
         end
+      end
+
+      context 'when an argument with a default value is given' do
+        let(:record) { {} }
+        let(:graphql_type) do
+          Class.new(GraphQL::Schema::Object) do
+            graphql_name "DummyEcho#{rand(10**9)}"
+
+            field :echo, String, null: false do
+              argument :value, String, default_value: 'default'
+            end
+
+            def echo(value:)
+              value unless value == 'default'
+            end
+          end
+        end
+
+        context 'without arguments' do
+          it 'calls the field with the default value' do
+            expect(error_messages).to eq(['expected non-nullable field "echo" not to be `nil`'])
+          end
+        end
+
+        context 'with arguments' do
+          let(:matcher) { described_class.new(graphql_type).with_arguments(echo: { value: 'given' }) }
+
+          it { is_expected.to be_empty }
+        end
+
+        context 'with arguments for the same path given twice in different naming' do
+          let(:matcher) do
+            described_class.new(graphql_type).with_arguments(echo: { value: 'default' }).with_arguments('echo' => {})
+              .with_arguments(echo: { value: 'given' })
+          end
+
+          it { is_expected.to be_empty }
+        end
+      end
+
+      context 'when the field name contains an ActiveSupport acronym' do
+        let(:record) { {} }
+        let(:matcher) { described_class.new(graphql_type).with_arguments(user_api_key: { name: 'John' }) }
+        let(:graphql_type) do
+          Class.new(GraphQL::Schema::Object) do
+            graphql_name "DummyApiKey#{rand(10**9)}"
+
+            field :user_api_key, String, null: false do
+              argument :name, String
+            end
+
+            def user_api_key(name:) = "key-#{name}"
+          end
+        end
+
+        around do |example|
+          ActiveSupport::Inflector.inflections(:en) { _1.acronym('API') }
+          example.run
+        ensure
+          ActiveSupport::Inflector.inflections(:en).clear(:acronyms)
+        end
+
+        it { is_expected.to be_empty }
       end
 
       context 'when a Hash value is looked up by key' do

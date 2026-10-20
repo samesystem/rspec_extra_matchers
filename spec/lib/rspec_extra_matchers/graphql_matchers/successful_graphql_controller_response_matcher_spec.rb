@@ -258,6 +258,31 @@ RSpec.describe RSpecExtraMatchers::GraphqlMatchers::SuccessfulGraphqlControllerR
       it { is_expected.to be_truthy }
     end
 
+    context 'when a response field takes arguments' do
+      let(:action_response_type) do
+        Class.new do
+          include GraphqlRails::Model
+
+          graphql do |c|
+            c.name("DummyUser#{rand(10**9)}")
+            c.attribute(:greeting_for).type('String!').permit(name: 'String!')
+          end
+
+          def greeting_for(name:) = "Hi #{name}"
+        end
+      end
+
+      context 'without arguments' do
+        it { is_expected.to be_falsey }
+      end
+
+      context 'with arguments' do
+        let(:matcher) { described_class.new.with_arguments(greeting_for: { name: 'John' }) }
+
+        it { is_expected.to be_truthy }
+      end
+    end
+
     context 'when the declared model is an STI class' do
       let(:sti_base) do
         base = Class.new { def id = '123' }

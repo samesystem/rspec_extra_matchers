@@ -47,9 +47,9 @@ module RSpecExtraMatchers
       end
 
       # Arguments to call fields with, keyed by field path:
-      # `with_arguments(user: { id: 1 }, 'user.posts': { first: 2 })`
+      # `with_arguments(user: { id: 1 }, 'user.posts': { status: 'draft' })`
       def with_arguments(arguments)
-        field_arguments = @type_matcher_options[:field_arguments].merge(arguments)
+        field_arguments = FieldArguments.merge(@type_matcher_options[:field_arguments], arguments)
         @type_matcher_options = @type_matcher_options.merge(field_arguments:)
         self
       end

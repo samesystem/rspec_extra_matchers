@@ -6,6 +6,7 @@
 
 require 'rspec/matchers/composable'
 require_relative 'assert_type_and_value'
+require_relative 'field_arguments'
 require_relative 'union_type_resolver'
 
 module RSpecExtraMatchers
@@ -68,9 +69,9 @@ module RSpecExtraMatchers
       end
 
       # Arguments to call fields with, keyed by field path:
-      # `with_arguments(user: { id: 1 }, 'user.posts': { first: 2 })`
+      # `with_arguments(user: { id: 1 }, 'user.posts': { status: 'draft' })`
       def with_arguments(arguments)
-        @field_arguments = field_arguments.merge(arguments)
+        @field_arguments = FieldArguments.merge(field_arguments, arguments)
         self
       end
 
