@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-10-20
+
 ### Added
 
 * `with_arguments` on `satisfy_graphql_type`, `be_valid_graphql_type_for`, `be_valid_graphql_decorator` and `be_successful_graphql_request` calls fields with the given arguments: `with_arguments(user: { id: 1 }, 'user.posts': { status: 'draft' })`. Field paths take Ruby or GraphQL names; argument names are the Ruby keywords. Declared default values are passed for arguments left out, without GraphQL's input coercion or `prepare:`. Arguments consumed by field extensions, such as connection `first`/`after`, are not supported
