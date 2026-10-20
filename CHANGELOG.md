@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-* A value that is not an instance of the declared GraphqlRails model passes as one when it responds to every attribute of it, as GraphqlRails resolves attributes with `send`. Private `Kernel` methods such as `format` do not count. Applies to nested fields and to `be_successful_graphql_request` results
+* A value that is not an instance of the declared GraphqlRails model passes as one when it responds to every attribute of it, as GraphqlRails resolves attributes with `send`. Methods every object has, such as `Kernel#format` or ActiveSupport's `try`, do not count, and a model without attributes accepts nothing this way. Applies to nested fields under a GraphqlRails model and to `be_successful_graphql_request` results. This loosens the check: a spec expecting such a value to fail now passes
 
 ## [1.1.0] - 2026-10-20
 

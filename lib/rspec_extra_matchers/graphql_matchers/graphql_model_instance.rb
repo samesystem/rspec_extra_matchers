@@ -4,8 +4,6 @@ module RSpecExtraMatchers
   module GraphqlMatchers
     # Checks whether a value can be served as the given GraphqlRails model
     module GraphqlModelInstance
-      GENERIC_OWNERS = [Kernel, Object, BasicObject].freeze
-
       module_function
 
       # An STI record may come back as its own subclass rather than the declared one. GraphQL serialises it with the
@@ -20,14 +18,16 @@ module RSpecExtraMatchers
       end
 
       def responds_to_attributes?(value, model)
-        model.graphql.attributes.each_value.all? { |attribute| attribute_method?(value, attribute.property) }
+        attributes = model.graphql.attributes.values
+        attributes.any? && attributes.all? { |attribute| attribute_method?(value, attribute.property) }
       end
 
-      # Private Kernel methods such as `format` or `select` answer `respond_to?(name, true)` on every object
+      # Methods every object has, such as Kernel's private `format` or ActiveSupport's `try`, don't count.
+      # `method` is called unbound, since a value may define its own `method`, as a Struct member can.
       def attribute_method?(value, name)
         return false unless value.respond_to?(name, true)
 
-        !GENERIC_OWNERS.include?(value.method(name).owner)
+        !Object.ancestors.include?(Kernel.instance_method(:method).bind_call(value, name).owner)
       rescue NameError
         true
       end

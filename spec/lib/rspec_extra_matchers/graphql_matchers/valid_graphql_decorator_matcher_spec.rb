@@ -116,6 +116,117 @@ RSpec.describe RSpecExtraMatchers::GraphqlMatchers::ValidGraphqlDecoratorMatcher
       it { is_expected.to be_empty }
     end
 
+    context 'when graphql field value responds to only some of its attributes' do
+      let(:graphql_decorator_organization) do
+        Class.new do
+          include GraphqlRails::Model
+
+          def self.name = @name ||= "DummyOrganization#{rand(10**9)}"
+
+          graphql do |c|
+            c.attribute(:id).type('ID!')
+            c.attribute(:title).type('String!')
+          end
+        end
+      end
+      let(:organization) { Struct.new(:id).new('123') }
+
+      it 'returns error message' do
+        expect(error_messages).to contain_exactly(
+          "According to graphql configuration, #{organization.inspect} should be an " \
+          "instance of #{graphql_decorator_organization.name}, but it is "
+        )
+      end
+    end
+
+    context 'when graphql field value responds to an attribute property that differs from its name' do
+      let(:graphql_decorator_organization) do
+        Class.new do
+          include GraphqlRails::Model
+
+          def self.name = @name ||= "DummyOrganization#{rand(10**9)}"
+
+          graphql do |c|
+            c.attribute(:full_name, property: :name).type('String!')
+          end
+        end
+      end
+      let(:organization) { Struct.new(:name).new('Acme') }
+
+      it { is_expected.to be_empty }
+    end
+
+    context 'when graphql field value has a private attribute method' do
+      let(:organization) do
+        Class.new do
+          private
+
+          def id = '123'
+        end.new
+      end
+
+      it { is_expected.to be_empty }
+    end
+
+    context 'when graphql field value has a Struct member named method' do
+      let(:graphql_decorator_organization) do
+        Class.new do
+          include GraphqlRails::Model
+
+          def self.name = @name ||= "DummyOrganization#{rand(10**9)}"
+
+          graphql do |c|
+            c.attribute(:method).type('String!')
+          end
+        end
+      end
+      let(:organization) { Struct.new(:method).new('GET') }
+
+      it { is_expected.to be_empty }
+    end
+
+    context 'when graphql field value answers an attribute only through a method every object has' do
+      let(:graphql_decorator_organization) do
+        Class.new do
+          include GraphqlRails::Model
+
+          def self.name = @name ||= "DummyOrganization#{rand(10**9)}"
+
+          graphql do |c|
+            c.attribute(:try).type('String!')
+          end
+        end
+      end
+      let(:organization) { 'not a model' }
+
+      it 'returns error message' do
+        expect(error_messages).to contain_exactly(
+          "According to graphql configuration, #{organization.inspect} should be an " \
+          "instance of #{graphql_decorator_organization.name}, but it is String"
+        )
+      end
+    end
+
+    context 'when graphql field model has no attributes' do
+      let(:graphql_decorator_organization) do
+        Class.new do
+          include GraphqlRails::Model
+
+          def self.name = @name ||= "DummyOrganization#{rand(10**9)}"
+
+          graphql { |c| c.description('Nothing to resolve') }
+        end
+      end
+      let(:organization) { 'not a model' }
+
+      it 'returns error message' do
+        expect(error_messages).to contain_exactly(
+          "According to graphql configuration, #{organization.inspect} should be an " \
+          "instance of #{graphql_decorator_organization.name}, but it is String"
+        )
+      end
+    end
+
     context 'when graphql field value answers an attribute only through a private Kernel method' do
       let(:graphql_decorator_organization) do
         Class.new do

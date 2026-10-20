@@ -290,7 +290,12 @@ RSpec.describe RSpecExtraMatchers::GraphqlMatchers::SuccessfulGraphqlControllerR
         end
         let(:response_result) { [other_record_class.new] }
 
-        it { is_expected.to be_falsey }
+        it 'reports the model mismatch' do
+          matcher.matches?(controller_response)
+
+          expect(matcher.failure_message)
+            .to eq("Expected response to be an instance of #{action_response_type}, but it's #{other_record_class}")
+        end
       end
     end
 
