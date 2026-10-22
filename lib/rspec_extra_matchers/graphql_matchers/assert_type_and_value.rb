@@ -226,7 +226,7 @@ module RSpecExtraMatchers
         return assert_basic_type_for(value:, type: unwrapped_type) if basic_type?(unwrapped_type)
         return assert_enum_type(value:, type: unwrapped_type, field_name: item_field_name) if enum_type?(unwrapped_type)
 
-        return if @deeply && !checked_records.add?(value, unwrapped_type)
+        return unless checked_records.add?(value, unwrapped_type)
 
         object_type = resolve_object_type(unwrapped_type, value:, field_name: item_field_name)
         object_type&.fields&.each_value do |field|

@@ -122,7 +122,7 @@ module RSpecExtraMatchers
           assert_leaf_value
         else
           owner_type = object_type
-          checked_records.add?(record, owner_type) if deeply? && owner_type
+          checked_records.add?(record, owner_type) if owner_type
           owner_type&.fields&.each_value { |field| assert_field(field, owner_type:) }
         end
       end

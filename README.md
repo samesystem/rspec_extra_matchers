@@ -97,8 +97,9 @@ describe Graphql::UserDecorator do
 end
 ```
 
-`deeply` also checks the fields of nested types. Each nested object is checked once: one with an `id` is known by its
-GraphQL type and id, so a cycle of decorators rebuilt on every call ends when it reaches a record already checked.
+`deeply` also checks the fields of nested types; shallow mode checks only their class, except for list items, whose
+fields are always checked. Each nested object is checked once: one with an `id` is known by its GraphQL type and id, so
+a cycle of decorators rebuilt on every call ends when it reaches a record already checked.
 
 ### Query context
 

@@ -1237,6 +1237,13 @@ RSpec.describe RSpecExtraMatchers::GraphqlMatchers::TypeMatcher do
           expect(error_messages).to eq(['expected non-nullable field "friends[0].name" not to be `nil`'])
         end
       end
+
+      context 'when using shallow mode, which still checks the fields of list items' do
+        let(:matcher) { described_class.new(graphql_type).tap(&:shallow) }
+        let(:second_name) { 'Bob' }
+
+        it { is_expected.to be_empty }
+      end
     end
 
     context 'with custom inner type' do
