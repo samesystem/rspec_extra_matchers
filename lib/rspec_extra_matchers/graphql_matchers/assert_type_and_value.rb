@@ -80,7 +80,7 @@ module RSpecExtraMatchers
           .detect { |attr| attr.property == property }
       end
 
-      def assert_graphql_rails_model
+      def assert_graphql_rails_model(value = self.value)
         graphql_model = graphql_rails_attribute.graphql_model
         return if GraphqlModelInstance.call(value, graphql_model)
 
@@ -151,7 +151,9 @@ module RSpecExtraMatchers
       end
 
       def assert_list
+        list_model = graphql_model?
         value.each.with_index do |item, i|
+          assert_graphql_rails_model(item) if list_model && !item.nil?
           assert_nested_fields(item, type: unwrap_list(type), prefix: "[#{i}]")
         end
       end

@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* Each item of a list field typed with a `GraphqlRails::Model` must be an instance of that model, as a single value already had to be. A raw record in such a list passed before as long as it responded to the declared fields
 * `deeply` no longer loops forever on a cycle of objects that are rebuilt on every field call, such as decorators wrapping a user whose shops list the user again. An object with an `id` is checked once per GraphQL type and id, across the whole check rather than only along its own path, and list items now count as visited too, so each record's fields are checked once
 
 ## [1.2.1] - 2026-10-20

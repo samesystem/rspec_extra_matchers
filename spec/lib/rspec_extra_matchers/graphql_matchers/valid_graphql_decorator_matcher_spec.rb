@@ -167,6 +167,24 @@ RSpec.describe RSpecExtraMatchers::GraphqlMatchers::ValidGraphqlDecoratorMatcher
       end
     end
 
+    context 'when a list field has GraphqlRails::Model items, but an item is not a GraphqlRails::Model' do
+      let(:graphql_decorator) do
+        stub_const('DummyListedOrganization', graphql_decorator_organization)
+
+        Class.new(super()) do
+          graphql.attribute(:organizations).type('[DummyListedOrganization!]!')
+
+          def organizations = [organization, Struct.new(:id).new('456')]
+        end
+      end
+
+      it 'returns error message' do
+        expect(error_messages).to contain_exactly(
+          a_string_starting_with('According to graphql configuration, #<struct id="456"> should be an instance of')
+        )
+      end
+    end
+
     context 'when graphql field has GraphqlRails::Model type, but value is not a GraphqlRails::Model' do
       let(:record_params) { super().merge(organization: 'not_a_model') }
 
