@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require_relative 'checked_records'
 require_relative 'field_arguments'
 require_relative 'graphql_model_instance'
 require_relative 'union_type_resolver'
@@ -11,7 +12,7 @@ module RSpecExtraMatchers
       ValueExecutionError = Class.new(StandardError)
       MissingFieldError = Class.new(StandardError)
 
-      def initialize(type:, value_parent:, deeply:, strictly:, field_name: nil, checked_records: Set.new, property: nil, # rubocop:disable Metrics/ParameterLists, Metrics/MethodLength
+      def initialize(type:, value_parent:, deeply:, strictly:, field_name: nil, checked_records: CheckedRecords.new, property: nil, # rubocop:disable Metrics/ParameterLists, Metrics/MethodLength
                      field: nil, owner_type: nil, graphql_context: nil, field_arguments: {})
         @value_parent = value_parent
         @deeply = deeply
@@ -56,7 +57,7 @@ module RSpecExtraMatchers
 
       def assert_complex_type
         assert_graphql_rails_model if graphql_model?
-        assert_nested_fields(value, type:) if assert_deeply?(value)
+        assert_nested_fields(value, type:) if @deeply
       end
 
       def graphql_model?
@@ -86,10 +87,6 @@ module RSpecExtraMatchers
         expected_type = graphql_model.name.presence || graphql_model.to_s
         actual_type = value.class.name
         add_error(:graphql_rails_type_mismatch, value: value.inspect, expected_type:, actual_type:)
-      end
-
-      def assert_deeply?(value)
-        @deeply && !checked_records.include?(value)
       end
 
       def strict?
@@ -227,6 +224,8 @@ module RSpecExtraMatchers
         return assert_basic_type_for(value:, type: unwrapped_type) if basic_type?(unwrapped_type)
         return assert_enum_type(value:, type: unwrapped_type, field_name: item_field_name) if enum_type?(unwrapped_type)
 
+        return if @deeply && !checked_records.add?(value, unwrapped_type)
+
         object_type = resolve_object_type(unwrapped_type, value:, field_name: item_field_name)
         object_type&.fields&.each_value do |field|
           assert_nested_type(value, field:, owner_type: object_type, suffix: "#{prefix}.#{field.name}")
@@ -245,12 +244,11 @@ module RSpecExtraMatchers
 
       def assert_nested_type(value_parent, field:, owner_type:, suffix: '') # rubocop:disable Metrics/MethodLength
         full_field_name = "#{field_name}#{suffix}"
-        all_checked_records = checked_records + [value_parent]
         errors = self.class.new(
           type: field.type,
           field_name: full_field_name,
           value_parent:,
-          checked_records: all_checked_records,
+          checked_records:,
           deeply: @deeply,
           strictly: @strictly,
           property: field.method_str,

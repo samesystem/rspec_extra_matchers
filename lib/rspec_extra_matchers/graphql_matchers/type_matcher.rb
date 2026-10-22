@@ -6,6 +6,7 @@
 
 require 'rspec/matchers/composable'
 require_relative 'assert_type_and_value'
+require_relative 'checked_records'
 require_relative 'field_arguments'
 require_relative 'union_type_resolver'
 
@@ -47,6 +48,7 @@ module RSpecExtraMatchers
 
       def matches?(record)
         @record = record
+        @checked_records = CheckedRecords.new
         assert_type
 
         error_messages.empty?
@@ -75,6 +77,13 @@ module RSpecExtraMatchers
         self
       end
 
+      # Query context set on GraphqlRails models while their fields are called, as GraphqlRails does at runtime:
+      # `with_graphql_context(current_user: user)`
+      def with_graphql_context(graphql_context)
+        @graphql_context = graphql_context
+        self
+      end
+
       def failure_message
         message = "Expected #{@record} to match #{graphql_type}, but it didn't:\n"
         message + error_messages.take(5).join("\n").indent(2)
@@ -90,11 +99,7 @@ module RSpecExtraMatchers
 
       private
 
-      attr_reader :graphql_context, :field_arguments
-
-      def assert_deeply?(value)
-        @deeply && !checked_records.include?(value)
-      end
+      attr_reader :graphql_context, :field_arguments, :checked_records
 
       def extract_graphql_type(klass)
         graphql_rails_class?(klass) ? klass.graphql.graphql_type : klass
@@ -117,6 +122,7 @@ module RSpecExtraMatchers
           assert_leaf_value
         else
           owner_type = object_type
+          checked_records.add?(record, owner_type) if deeply? && owner_type
           owner_type&.fields&.each_value { |field| assert_field(field, owner_type:) }
         end
       end
@@ -162,7 +168,8 @@ module RSpecExtraMatchers
           field:,
           owner_type:,
           graphql_context:,
-          field_arguments:
+          field_arguments:,
+          checked_records:
         ).call
       end
 

@@ -97,6 +97,19 @@ describe Graphql::UserDecorator do
 end
 ```
 
+`deeply` also checks the fields of nested types. Each nested object is checked once: one with an `id` is known by its
+GraphQL type and id, so a cycle of decorators rebuilt on every call ends when it reaches a record already checked.
+
+### Query context
+
+A GraphqlRails model that reads `graphql_context` gets it from the query at runtime. Give the matchers one with
+`with_graphql_context`, which works on `satisfy_graphql_type`, `be_valid_graphql_type_for` and
+`be_valid_graphql_decorator`:
+
+```ruby
+expect(shift_decorator).to be_valid_graphql_decorator.with_graphql_context(current_user: user)
+```
+
 ### Fields with arguments
 
 The matchers call every field method with only the default values of its arguments. A field with a required argument

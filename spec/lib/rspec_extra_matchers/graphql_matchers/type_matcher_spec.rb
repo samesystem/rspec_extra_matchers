@@ -1197,6 +1197,48 @@ RSpec.describe RSpecExtraMatchers::GraphqlMatchers::TypeMatcher do
       end
     end
 
+    context 'when nested objects lead back to a record already being checked' do
+      let(:matcher) { super().tap(&:deeply) }
+
+      let(:graphql_type) do
+        Class.new(GraphQL::Schema::Object) do
+          graphql_name "DummyPerson#{rand(10**9)}"
+          field :id, GraphQL::Types::ID, null: false
+          field :name, String, null: false
+          field :friends, [self], null: false
+        end
+      end
+
+      # Built anew on every call, like a decorator wrapping the same record
+      let(:person_class) do
+        Struct.new(:id, :name, :friend_ids, :people, keyword_init: true) do
+          def friends = friend_ids.map { |id| people.fetch(id).dup }
+        end
+      end
+
+      let(:record) { people.fetch('1') }
+      let(:people) do
+        {}.tap do |people|
+          people['1'] = person_class.new(id: '1', name: 'Ann', friend_ids: %w[2], people:)
+          people['2'] = person_class.new(id: '2', name: second_name, friend_ids: %w[1 2], people:)
+        end
+      end
+
+      context 'when every record matches' do
+        let(:second_name) { 'Bob' }
+
+        it { is_expected.to be_empty }
+      end
+
+      context 'when a record inside the cycle does not match' do
+        let(:second_name) { nil }
+
+        it 'reports it once' do
+          expect(error_messages).to eq(['expected non-nullable field "friends[0].name" not to be `nil`'])
+        end
+      end
+    end
+
     context 'with custom inner type' do
       let(:matcher) { super().tap(&:deeply) }
 

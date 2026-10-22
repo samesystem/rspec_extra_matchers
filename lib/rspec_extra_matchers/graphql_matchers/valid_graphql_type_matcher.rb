@@ -54,6 +54,13 @@ module RSpecExtraMatchers
         self
       end
 
+      # Query context set on GraphqlRails models while their fields are called, as GraphqlRails does at runtime:
+      # `with_graphql_context(current_user: user)`
+      def with_graphql_context(graphql_context)
+        @type_matcher_options = @type_matcher_options.merge(graphql_context:)
+        self
+      end
+
       def failure_message
         message = "Expected #{graphql_type_or_model}, to be valid GraphqlType for #{record}, but it's not:\n"
         message + type_matcher.error_messages.take(5).join("\n").indent(2)
