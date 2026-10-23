@@ -58,6 +58,28 @@ RSpec.describe RSpecExtraMatchers::GraphqlMatchers::ValidGraphqlDecoratorMatcher
       it { is_expected.to be_empty }
     end
 
+    context 'when a field reads graphql_context' do
+      let(:graphql_decorator) do
+        Class.new(super()) do
+          graphql.attribute(:viewer_name).type('String!')
+
+          def viewer_name = graphql_context[:viewer_name]
+        end
+      end
+
+      context 'with the context given' do
+        let(:matcher) { described_class.new.with_graphql_context(viewer_name: 'Ann') }
+
+        it { expect(error_messages).to be_empty }
+      end
+
+      context 'without the context' do
+        it 'returns error message' do
+          expect(error_messages).to contain_exactly(/Method `viewer_name` for "viewerName" field raised an error/)
+        end
+      end
+    end
+
     context 'when record field is nil, but graphql field is non-nullable' do
       let(:record_params) { super().merge(name: nil) }
 
@@ -142,6 +164,24 @@ RSpec.describe RSpecExtraMatchers::GraphqlMatchers::ValidGraphqlDecoratorMatcher
         end
 
         it { is_expected.to be_empty }
+      end
+    end
+
+    context 'when a list field has GraphqlRails::Model items, but an item is not a GraphqlRails::Model' do
+      let(:graphql_decorator) do
+        stub_const('DummyListedOrganization', graphql_decorator_organization)
+
+        Class.new(super()) do
+          graphql.attribute(:organizations).type('[DummyListedOrganization!]!')
+
+          def organizations = [organization, Struct.new(:id).new('456')]
+        end
+      end
+
+      it 'returns error message' do
+        expect(error_messages).to contain_exactly(
+          a_string_starting_with('According to graphql configuration, #<struct id="456"> should be an instance of')
+        )
       end
     end
 

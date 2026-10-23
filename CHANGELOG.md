@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-10-22
+
+### Added
+
+* `with_graphql_context` on `satisfy_graphql_type`, `be_valid_graphql_type_for` and `be_valid_graphql_decorator` sets the query context on `GraphqlRails::Model` records while their fields are called, so decorators that read `graphql_context` can be checked
+
+### Fixed
+
+* Each item of a list field typed with a `GraphqlRails::Model` must be an instance of that model, as a single value already had to be. A raw record in such a list passed before as long as it responded to the declared fields
+* The matchers no longer loop forever on a cycle of objects that are rebuilt on every field call, such as decorators wrapping a user whose shops list the user again. `deeply` looped on any such cycle, and shallow mode on one made of lists, whose items' fields it always checks. An object with an `id` is checked once per GraphQL type and id, across the whole check rather than only along its own path, and list items now count as visited too, so each record's fields are checked once
+
 ## [1.2.1] - 2026-10-20
 
 ### Fixed
