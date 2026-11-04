@@ -345,17 +345,17 @@ RSpec.describe RSpecExtraMatchers::GraphqlMatchers::TypeMatcher do
     context 'when a plain object field has a resolver method on the type' do
       let(:graphql_type) do
         Class.new(GraphQL::Schema::Object) do
-          graphql_name "DummyReason#{rand(10**9)}"
+          graphql_name "DummyAccount#{rand(10**9)}"
           field :is_admin, GraphQL::Types::Boolean, null: false
-          field :additional_input, GraphQL::Types::Boolean, null: false, resolver_method: :additional_input?
-          field :shift_id, GraphQL::Types::ID, null: true
+          field :verified, GraphQL::Types::Boolean, null: false, resolver_method: :verified?
+          field :team_id, GraphQL::Types::ID, null: true
 
           def is_admin = object.role == 'admin' # rubocop:disable Naming/PredicateName
-          def additional_input? = object.input_required
-          def shift_id = object.shift&.fetch(:id)
+          def verified? = object.confirmed
+          def team_id = object.team&.fetch(:id)
         end
       end
-      let(:record_class) { Struct.new(:role, :input_required, :shift) }
+      let(:record_class) { Struct.new(:role, :confirmed, :team) }
 
       context 'when the resolver methods return valid values' do
         let(:record) { record_class.new('admin', false, { id: '7' }) }
@@ -369,13 +369,13 @@ RSpec.describe RSpecExtraMatchers::GraphqlMatchers::TypeMatcher do
         let(:record) { record_class.new('admin', nil, { id: '7' }) }
 
         it 'returns error message' do
-          expect(error_messages).to eq(['expected non-nullable field "additionalInput" not to be `nil`'])
+          expect(error_messages).to eq(['expected non-nullable field "verified" not to be `nil`'])
         end
       end
 
       context 'when the object also has a method of the field name' do
         let(:record_class) do
-          Struct.new(:role, :input_required, :shift) do
+          Struct.new(:role, :confirmed, :team) do
             def is_admin = 'not a Boolean' # rubocop:disable Naming/PredicateName
           end
         end
@@ -387,7 +387,7 @@ RSpec.describe RSpecExtraMatchers::GraphqlMatchers::TypeMatcher do
       end
 
       context 'when the resolver method calls a method missing on the object' do
-        let(:record_class) { Struct.new(:input_required, :shift) }
+        let(:record_class) { Struct.new(:confirmed, :team) }
         let(:record) { record_class.new(true, { id: '7' }) }
 
         it 'returns the raised error' do
@@ -447,6 +447,22 @@ RSpec.describe RSpecExtraMatchers::GraphqlMatchers::TypeMatcher do
       end
     end
 
+    context "when a plain type's resolver calls the field's own method missing on the object" do
+      let(:graphql_type) do
+        Class.new(GraphQL::Schema::Object) do
+          graphql_name "DummyForwarder#{rand(10**9)}"
+          field :name, String, null: false
+
+          def name = object.name
+        end
+      end
+      let(:record) { Struct.new(:id).new('1') }
+
+      it 'returns a missing field error' do
+        expect(error_messages.first).to start_with('Method `name` for "name" field does not exist on record')
+      end
+    end
+
     context 'when a plain type implements the Relay Node interface' do
       let(:graphql_type) do
         Class.new(GraphQL::Schema::Object) do
@@ -457,6 +473,20 @@ RSpec.describe RSpecExtraMatchers::GraphqlMatchers::TypeMatcher do
       let(:record) { Struct.new(:id).new('1') }
 
       it "calls the object's id, as graphql-ruby's global id resolver needs a schema" do
+        expect(error_messages).to be_empty
+      end
+    end
+
+    context 'when a plain type has a global_id_field' do
+      let(:graphql_type) do
+        Class.new(GraphQL::Schema::Object) do
+          graphql_name "DummyGlobalId#{rand(10**9)}"
+          global_id_field :id
+        end
+      end
+      let(:record) { Struct.new(:id).new('1') }
+
+      it "calls the object's id, as the generated global id resolver needs a schema" do
         expect(error_messages).to be_empty
       end
     end
@@ -554,6 +584,20 @@ RSpec.describe RSpecExtraMatchers::GraphqlMatchers::TypeMatcher do
       let(:record) { Struct.new(:display).new('Shown') }
 
       it 'calls the object method, not the built-in one on the type' do
+        expect(error_messages).to be_empty
+      end
+    end
+
+    context 'when a field is named after a method every object has, written in Ruby' do
+      let(:graphql_type) do
+        Class.new(GraphQL::Schema::Object) do
+          graphql_name "DummyThing#{rand(10**9)}"
+          field :presence, String, null: false, method_conflict_warning: false
+        end
+      end
+      let(:record) { Struct.new(:presence).new('Here') }
+
+      it 'calls the object method, not the one on the type' do
         expect(error_messages).to be_empty
       end
     end

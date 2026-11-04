@@ -298,12 +298,24 @@ module RSpecExtraMatchers
 
       # Only a method the schema's own code defines counts. GraphQL would also call a built-in such as `display` on
       # the type (and warns about such field names), or graphql-ruby's own resolvers such as Relay's
-      # `default_global_id`, which need a real schema; the matcher calls the object's method for those instead.
+      # `default_global_id`, which need a real schema; the matcher calls the object's method or looks up a Hash key
+      # instead.
       def own_type_method?
         return false unless field && owner_type.is_a?(Class) && owner_type.public_method_defined?(field.resolver_method)
 
-        method_owner = owner_type.instance_method(field.resolver_method).owner
-        !(GraphQL::Schema::Object <= method_owner) && !method_owner.name.to_s.start_with?('GraphQL::')
+        method = owner_type.instance_method(field.resolver_method)
+        !(GraphQL::Schema::Object <= method.owner) && !graphql_ruby_method?(method)
+      end
+
+      # Ruby's own methods have no source file. graphql-ruby's include those its macros define on the type, such as
+      # `global_id_field`. Methods every object has, such as ActiveSupport's `presence`, are caught by the caller.
+      def graphql_ruby_method?(method)
+        file = method.source_location&.first
+        file.nil? || file.start_with?(self.class.graphql_ruby_dir)
+      end
+
+      def self.graphql_ruby_dir
+        @graphql_ruby_dir ||= File.dirname(Object.const_source_location('GraphQL::Schema').first, 2)
       end
 
       def graphql_rails_type?(type)
