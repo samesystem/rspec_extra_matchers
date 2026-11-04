@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+* The gemspec requires Ruby 3.1 or later, which the code already needed: it uses hash shorthand and anonymous block arguments
+
 ## [1.3.1] - 2026-11-04
 
 ### Fixed

@@ -165,7 +165,8 @@ RSpec.describe RSpecExtraMatchers::GraphqlMatchers::TypeMatcher do
 
           it 'returns error message' do
             expect(error_messages)
-              .to eq(['Expected field "name" to be one of `[String, Symbol, Numeric, Date, Time]`, but was `TrueClass`'])
+              .to eq(['Expected field "name" to be one of `[String, Symbol, Numeric, Date, Time]`, ' \
+                      'but was `TrueClass`'])
           end
         end
       end
@@ -212,7 +213,7 @@ RSpec.describe RSpecExtraMatchers::GraphqlMatchers::TypeMatcher do
           end
           let(:record) { { errors: ['Not allowed'] } }
 
-          it 'returns the raised error, not a missing field' do
+          it 'returns the raised error, not a missing field', :aggregate_failures do
             expect(error_messages.size).to eq(1)
             expect(error_messages.first).to start_with('Method `error` for "error" field raised an error: ')
             expect(error_messages.first).to include('Array')
@@ -251,7 +252,7 @@ RSpec.describe RSpecExtraMatchers::GraphqlMatchers::TypeMatcher do
           end
           let(:record) { { errors: ['Not allowed'] } }
 
-          it 'returns the raised error, not a missing field' do
+          it 'returns the raised error, not a missing field', :aggregate_failures do
             expect(error_messages.size).to eq(1)
             expect(error_messages.first).to start_with('Method `error` for "error" field raised an error: ')
             expect(error_messages.first).to include('errors')
@@ -350,7 +351,7 @@ RSpec.describe RSpecExtraMatchers::GraphqlMatchers::TypeMatcher do
           field :verified, GraphQL::Types::Boolean, null: false, resolver_method: :verified?
           field :team_id, GraphQL::Types::ID, null: true
 
-          def is_admin = object.role == 'admin' # rubocop:disable Naming/PredicateName
+          def is_admin = object.role == 'admin'
           def verified? = object.confirmed
           def team_id = object.team&.fetch(:id)
         end
@@ -376,7 +377,7 @@ RSpec.describe RSpecExtraMatchers::GraphqlMatchers::TypeMatcher do
       context 'when the object also has a method of the field name' do
         let(:record_class) do
           Struct.new(:role, :confirmed, :team) do
-            def is_admin = 'not a Boolean' # rubocop:disable Naming/PredicateName
+            def is_admin = 'not a Boolean'
           end
         end
         let(:record) { record_class.new('guest', true, { id: '7' }) }
@@ -390,7 +391,7 @@ RSpec.describe RSpecExtraMatchers::GraphqlMatchers::TypeMatcher do
         let(:record_class) { Struct.new(:confirmed, :team) }
         let(:record) { record_class.new(true, { id: '7' }) }
 
-        it 'returns the raised error' do
+        it 'returns the raised error', :aggregate_failures do
           expect(error_messages.size).to eq(1)
           expect(error_messages.first).to start_with('Method `is_admin` for "isAdmin" field raised an error: ')
           expect(error_messages.first).to include('role')
@@ -581,7 +582,7 @@ RSpec.describe RSpecExtraMatchers::GraphqlMatchers::TypeMatcher do
           field :display, String, null: false, method_conflict_warning: false
         end
       end
-      let(:record) { Struct.new(:display).new('Shown') }
+      let(:record) { Struct.new(:display).new('Shown') } # rubocop:disable Lint/StructNewOverride
 
       it 'calls the object method, not the built-in one on the type' do
         expect(error_messages).to be_empty
@@ -749,7 +750,8 @@ RSpec.describe RSpecExtraMatchers::GraphqlMatchers::TypeMatcher do
 
           it 'returns error message' do
             expect(error_messages)
-              .to eq(['Expected value of the "roles[1]" enum field to be one of [:admin, :regular], but was `:invalid`'])
+              .to eq(['Expected value of the "roles[1]" enum field to be one of [:admin, :regular], ' \
+                      'but was `:invalid`'])
           end
         end
       end
@@ -1129,7 +1131,7 @@ RSpec.describe RSpecExtraMatchers::GraphqlMatchers::TypeMatcher do
       end
 
       context 'when the field is a predicate' do
-        let(:matcher) { described_class.new(graphql_type).with_arguments('greets?': { name: 'John' }) }
+        let(:matcher) { described_class.new(graphql_type).with_arguments(greets?: { name: 'John' }) }
         let(:model_class) do
           Class.new do
             include GraphqlRails::Model
@@ -1402,7 +1404,9 @@ RSpec.describe RSpecExtraMatchers::GraphqlMatchers::TypeMatcher do
       let(:poll_class) { Struct.new(:question) }
 
       let(:content_union) do
-        post, poll, post_class = [post_type, poll_type, self.post_class]
+        post = post_type
+        poll = poll_type
+        post_class = self.post_class
         Class.new(GraphQL::Schema::Union) do
           graphql_name "DummyContent#{rand(10**9)}"
           possible_types post, poll
@@ -1439,7 +1443,8 @@ RSpec.describe RSpecExtraMatchers::GraphqlMatchers::TypeMatcher do
 
       context 'when union can not resolve the type' do
         let(:content_union) do
-          post, poll = [post_type, poll_type]
+          post = post_type
+          poll = poll_type
           Class.new(GraphQL::Schema::Union) do
             graphql_name "DummyContent#{rand(10**9)}"
             possible_types post, poll
@@ -1608,7 +1613,7 @@ RSpec.describe RSpecExtraMatchers::GraphqlMatchers::TypeMatcher do
             it 'returns error message' do
               expect(error_messages)
                 .to eq(['Expected field "locations[1].city" to be one of `[String, Symbol, Numeric, Date, Time]`, ' \
-                     'but was `TrueClass`'])
+                        'but was `TrueClass`'])
             end
           end
 
@@ -1619,7 +1624,7 @@ RSpec.describe RSpecExtraMatchers::GraphqlMatchers::TypeMatcher do
             it 'returns error message' do
               expect(error_messages)
                 .to eq(['Expected field "locations[1].city" to be one of `[String, Symbol, Numeric, Date, Time]`, ' \
-                     'but was `TrueClass`'])
+                        'but was `TrueClass`'])
             end
           end
         end

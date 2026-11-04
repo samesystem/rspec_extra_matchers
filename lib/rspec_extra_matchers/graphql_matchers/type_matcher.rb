@@ -13,7 +13,7 @@ require_relative 'union_type_resolver'
 module RSpecExtraMatchers
   module GraphqlMatchers
     # Matcher for testing graphql types
-    class TypeMatcher
+    class TypeMatcher # rubocop:disable Metrics/ClassLength
       require 'rspec/matchers/composable'
 
       include RSpec::Matchers::Composable
@@ -29,7 +29,8 @@ module RSpecExtraMatchers
         wrong_enum_value: 'Expected value of the "%<field_name>s" enum field to be one of %<expected_values>s, ' \
                           'but was `%<actual_value>s`',
         not_a_graphql_type: 'Expected a GraphQL type, but got %<graphql_type>s',
-        graphql_rails_type_mismatch: 'According to graphql configuration, %<value>s should be an instance of %<expected_type>s, but it is %<actual_type>s',
+        graphql_rails_type_mismatch: 'According to graphql configuration, %<value>s should be an instance of ' \
+                                     '%<expected_type>s, but it is %<actual_type>s',
         wrong_scalar_value: 'Scalar "%<field_name>s" field can not serialize value %<value>s: %<error>s',
         unresolved_union_type: 'Could not resolve union type %<union>s for "%<field_name>s" field value %<value>s',
         missing_arguments: 'Field "%<field_name>s" requires arguments %<arguments>s, pass them with `with_arguments`'
@@ -115,7 +116,7 @@ module RSpecExtraMatchers
         @strictly
       end
 
-      def assert_type
+      def assert_type # rubocop:disable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
         if !graphql_type.is_a?(GraphQL::Schema::Wrapper) && !(graphql_type < GraphQL::Schema::Member)
           @detailed_error_messages << { type: :not_a_graphql_type, graphql_type: }
         elsif leaf_type?

@@ -12,8 +12,9 @@ module RSpecExtraMatchers
       ValueExecutionError = Class.new(StandardError)
       MissingFieldError = Class.new(StandardError)
 
-      def initialize(type:, value_parent:, deeply:, strictly:, field_name: nil, checked_records: CheckedRecords.new, property: nil, # rubocop:disable Metrics/ParameterLists, Metrics/MethodLength
-                     field: nil, owner_type: nil, graphql_context: nil, field_arguments: {})
+      def initialize(type:, value_parent:, deeply:, strictly:, field_name: nil, # rubocop:disable Metrics/ParameterLists, Metrics/MethodLength
+                     checked_records: CheckedRecords.new, property: nil, field: nil, owner_type: nil,
+                     graphql_context: nil, field_arguments: {})
         @value_parent = value_parent
         @deeply = deeply
         @strictly = strictly
@@ -28,6 +29,10 @@ module RSpecExtraMatchers
         @field_arguments = field_arguments
       end
 
+      def self.graphql_ruby_dir
+        @graphql_ruby_dir ||= File.dirname(Object.const_source_location('GraphQL::Schema').first, 2)
+      end
+
       def call
         assert_type_and_value
 
@@ -39,7 +44,7 @@ module RSpecExtraMatchers
       attr_reader :detailed_error_messages, :type, :checked_records, :value_parent, :field_name, :property, :field,
                   :owner_type, :graphql_context, :field_arguments
 
-      def assert_type_and_value # rubocop:disable Metrics/AbcSize
+      def assert_type_and_value # rubocop:disable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/MethodLength
         return add_missing_method_error unless parent_method_exist?
         return add_missing_arguments_error if missing_arguments.any?
 
@@ -72,11 +77,11 @@ module RSpecExtraMatchers
 
         @graphql_rails_attribute =
           graphql_rails_parent
-          .class
-          .graphql
-          .attributes
-          .values
-          .detect { |attr| attr.property == property }
+            .class
+            .graphql
+            .attributes
+            .values
+            .detect { |attr| attr.property == property }
       end
 
       def graphql_rails_parent
@@ -114,7 +119,7 @@ module RSpecExtraMatchers
       end
 
       # A Hash value is looked up by key, so its arguments are never used
-      def missing_arguments
+      def missing_arguments # rubocop:disable Metrics/AbcSize
         return [] if field.nil? || (value_parent.is_a?(Hash) && !type_resolver?)
 
         field.arguments.each_value.filter_map do |argument|
@@ -304,7 +309,7 @@ module RSpecExtraMatchers
         return false unless field && owner_type.is_a?(Class) && owner_type.public_method_defined?(field.resolver_method)
 
         method = owner_type.instance_method(field.resolver_method)
-        !(GraphQL::Schema::Object <= method.owner) && !graphql_ruby_method?(method)
+        !(method.owner >= GraphQL::Schema::Object) && !graphql_ruby_method?(method)
       end
 
       # Ruby's own methods have no source file. graphql-ruby's include those its macros define on the type, such as
@@ -314,15 +319,11 @@ module RSpecExtraMatchers
         file.nil? || file.start_with?(self.class.graphql_ruby_dir)
       end
 
-      def self.graphql_ruby_dir
-        @graphql_ruby_dir ||= File.dirname(Object.const_source_location('GraphQL::Schema').first, 2)
-      end
-
       def graphql_rails_type?(type)
         defined?(GraphqlRails::Types::ObjectType) && type < GraphqlRails::Types::ObjectType
       end
 
-      def value
+      def value # rubocop:disable Metrics/MethodLength
         return @value if defined?(@value)
 
         @value =
@@ -335,7 +336,7 @@ module RSpecExtraMatchers
           end
       rescue MissingFieldError
         raise
-      rescue Exception => e
+      rescue Exception => e # rubocop:disable Lint/RescueException -- user code may raise any error, NotImplementedError included
         raise ValueExecutionError, e.message do
           set_backtrace e.backtrace
         end
@@ -380,7 +381,7 @@ module RSpecExtraMatchers
 
       # Mirrors GraphQL::Schema::Field's plain Hash lookup: a Hash default value is ignored, but a default proc
       # is called. Field options such as `hash_key:`, `dig:` and `fallback_value:` are not supported.
-      def hash_value
+      def hash_value # rubocop:disable Metrics/AbcSize
         if value_parent.key?(property.to_sym)
           value_parent[property.to_sym]
         elsif value_parent.key?(property.to_s) || value_parent.default_proc
