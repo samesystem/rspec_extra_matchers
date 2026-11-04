@@ -129,12 +129,18 @@ module RSpecExtraMatchers
       end
 
       def list_response?
-        return false if response_result.is_a?(Hash)
+        result = GraphqlModelInstance.unwrap_delegator(response_result)
+        return false if result.is_a?(Hash) || json_response?
         # GraphQL iterates a Struct only when the field is a list
-        return action_response_graphql_type.list? if response_result.is_a?(Struct)
-        return false if defined?(ActionController::Parameters) && response_result.is_a?(ActionController::Parameters)
+        return action_response_graphql_type.list? if result.is_a?(Struct)
+        return false if defined?(ActionController::Parameters) && result.is_a?(ActionController::Parameters)
 
-        response_result.respond_to?(:each)
+        result.respond_to?(:each)
+      end
+
+      # GraphQL serialises any value under a JSON scalar as is, an array included
+      def json_response?
+        !action_response_graphql_type.list? && action_response_graphql_type.unwrap <= GraphQL::Types::JSON
       end
 
       def controller

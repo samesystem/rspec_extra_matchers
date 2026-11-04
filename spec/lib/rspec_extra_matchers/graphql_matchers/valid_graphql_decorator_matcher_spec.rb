@@ -88,6 +88,39 @@ RSpec.describe RSpecExtraMatchers::GraphqlMatchers::ValidGraphqlDecoratorMatcher
       end
     end
 
+    context 'when graphql field value is the declared model wrapped in a Delegator' do
+      let(:organization) { SimpleDelegator.new(SimpleDelegator.new(graphql_decorator_organization.new)) }
+
+      it { is_expected.to be_empty }
+    end
+
+    context 'when graphql field value is a Delegator over another class' do
+      let(:organization) { SimpleDelegator.new(Struct.new(:id).new('456')) }
+
+      it 'returns error message' do
+        expect(error_messages).to contain_exactly(
+          a_string_ending_with("instance of #{graphql_decorator_organization.name}, but it is SimpleDelegator")
+        )
+      end
+    end
+
+    context 'when the declared model is itself a Delegator' do
+      let(:graphql_decorator_organization) do
+        Class.new(SimpleDelegator) do
+          include GraphqlRails::Model
+
+          def self.name = @name ||= "DummyOrganizationDecorator#{rand(10**10)}"
+
+          graphql do |c|
+            c.attribute(:id).type('ID!')
+          end
+        end
+      end
+      let(:organization) { graphql_decorator_organization.new(Struct.new(:id).new('456')) }
+
+      it { is_expected.to be_empty }
+    end
+
     context 'when graphql field has an STI GraphqlRails::Model type' do
       let(:sti_base) do
         base = Class.new { def id = '123' }

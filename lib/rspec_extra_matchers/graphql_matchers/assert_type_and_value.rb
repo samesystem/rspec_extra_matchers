@@ -61,8 +61,7 @@ module RSpecExtraMatchers
       end
 
       def graphql_model?
-        return false unless defined?(GraphqlRails::Model)
-        return false unless value_parent.is_a?(GraphqlRails::Model)
+        return false if graphql_rails_parent.nil? || graphql_rails_attribute.nil?
 
         attribute_model = graphql_rails_attribute.graphql_model
         attribute_model.is_a?(Class) && attribute_model < GraphqlRails::Model
@@ -72,12 +71,18 @@ module RSpecExtraMatchers
         return @graphql_rails_attribute if defined?(@graphql_rails_attribute)
 
         @graphql_rails_attribute =
-          value_parent
+          graphql_rails_parent
           .class
           .graphql
           .attributes
           .values
           .detect { |attr| attr.property == property }
+      end
+
+      def graphql_rails_parent
+        return @graphql_rails_parent if defined?(@graphql_rails_parent)
+
+        @graphql_rails_parent = GraphqlModelInstance.graphql_rails_record(value_parent)
       end
 
       def assert_graphql_rails_model(value = self.value)
@@ -278,14 +283,31 @@ module RSpecExtraMatchers
       # GraphqlRails resolves attributes with `send`, so private methods are valid too.
       # GraphQL resolves Hash objects by key, and a missing key resolves to `nil`.
       def parent_method_exist?
-        value_parent.is_a?(Hash) || value_parent.respond_to?(property, true)
+        value_parent.is_a?(Hash) || type_resolver? || value_parent.respond_to?(property, true)
       end
 
-      # Like GraphQL, a resolver method on the type wins over a Hash key lookup.
-      # Interfaces are modules and can't be instantiated, so they fall back to the key lookup.
+      # Like GraphQL, a resolver method on the type wins over calling the object's method or looking up a Hash key.
+      # Types GraphqlRails built resolve a record's attributes on the record itself, with the query context set,
+      # so only a Hash goes through their methods.
+      # Interfaces are modules and can't be instantiated, so they fall back to the object or the key lookup.
       def type_resolver?
-        value_parent.is_a?(Hash) && owner_type.is_a?(Class) &&
-          owner_type.public_method_defined?(field.resolver_method)
+        return @type_resolver if defined?(@type_resolver)
+
+        @type_resolver = own_type_method? && (value_parent.is_a?(Hash) || !graphql_rails_type?(owner_type))
+      end
+
+      # Only a method the schema's own code defines counts. GraphQL would also call a built-in such as `display` on
+      # the type (and warns about such field names), or graphql-ruby's own resolvers such as Relay's
+      # `default_global_id`, which need a real schema; the matcher calls the object's method for those instead.
+      def own_type_method?
+        return false unless field && owner_type.is_a?(Class) && owner_type.public_method_defined?(field.resolver_method)
+
+        method_owner = owner_type.instance_method(field.resolver_method).owner
+        !(GraphQL::Schema::Object <= method_owner) && !method_owner.name.to_s.start_with?('GraphQL::')
+      end
+
+      def graphql_rails_type?(type)
+        defined?(GraphqlRails::Types::ObjectType) && type < GraphqlRails::Types::ObjectType
       end
 
       def value
@@ -316,13 +338,12 @@ module RSpecExtraMatchers
       end
 
       def graphql_rails_field?
-        defined?(GraphqlRails::Types::ObjectType) && value_parent.respond_to?(:with_graphql_context) &&
-          runtime_owner_type < GraphqlRails::Types::ObjectType
+        value_parent.respond_to?(:with_graphql_context) && graphql_rails_type?(runtime_owner_type)
       end
 
       # GraphQL resolves an interface to the record's object type before calling its fields
       def runtime_owner_type
-        owner_type.is_a?(Class) ? owner_type : value_parent.class.graphql.graphql_type
+        owner_type.is_a?(Class) ? owner_type : graphql_rails_parent.class.graphql.graphql_type
       end
 
       # Not supported: a real query context (graphql-ruby types get `NullContext` by design),
@@ -332,13 +353,14 @@ module RSpecExtraMatchers
           .send(:new, value_parent, GraphQL::Query::NullContext.instance)
           .public_send(field.resolver_method, **arguments)
       rescue NoMethodError => e
-        # GraphqlRails resolvers call the attribute method on the Hash itself
-        raise MissingFieldError if missing_on_hash?(e)
+        # The resolver called the field's method on an object that lacks it: a GraphqlRails resolver on a Hash,
+        # or a plain resolver delegating to the object
+        raise MissingFieldError if missing_on_parent?(e)
 
         raise
       end
 
-      def missing_on_hash?(error)
+      def missing_on_parent?(error)
         error.name == property.to_sym && error.receiver.equal?(value_parent)
       rescue ArgumentError # raised by #receiver when the error was built without one
         false

@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.1] - 2026-11-04
+
+### Fixed
+
+* A field whose plain `GraphQL::Schema::Object` type defines its resolver method (its own method, or one named with `resolver_method:`) is resolved through that method for any object, as GraphQL does, not only for a Hash. Such fields were reported as ``Method `...` for "..." field does not exist on record`` when the object itself had no method of that name. The method runs without a query context, as it already did for a Hash. Types GraphqlRails builds still resolve a record's attributes on the record. Built-in methods such as `display` and graphql-ruby's own resolvers such as Relay's `default_global_id` are not taken for resolvers: the object's method is called. A resolver method defined on an interface is still not used
+* `be_successful_graphql_request` accepts an array returned by an action typed as a `JSON` scalar, instead of failing with "Response type is not a list, but the result is a list-like object"
+* A `Delegator` (such as `SimpleDelegator`) wrapping a `GraphqlRails::Model` record is accepted as an instance of that model, including nested delegators and decorators that are `Delegator` subclasses and models themselves. A delegator around another class still fails, and the message names the delegator class. The `GraphqlRails::Model` fields of a wrapped record are class-checked as those of the record itself
+
 ## [1.3.0] - 2026-10-22
 
 ### Added

@@ -143,6 +143,112 @@ RSpec.describe RSpecExtraMatchers::GraphqlMatchers::SuccessfulGraphqlControllerR
       end
     end
 
+    context 'when action returns a JSON scalar' do
+      let(:controller) do
+        Class.new(GraphqlRails::Controller) do
+          action(:index).returns('JSON!')
+        end
+      end
+
+      context 'when result is an array' do
+        let(:response_result) { [{ 'key' => 'value' }] }
+
+        it { is_expected.to be_truthy }
+      end
+
+      context 'when result is a hash' do
+        let(:response_result) { { 'key' => 'value' } }
+
+        it { is_expected.to be_truthy }
+      end
+    end
+
+    context 'when action returns a nullable JSON scalar' do
+      let(:response_result) { [1, 2] }
+      let(:controller) do
+        Class.new(GraphqlRails::Controller) do
+          action(:index).returns('JSON')
+        end
+      end
+
+      it { is_expected.to be_truthy }
+    end
+
+    context 'when action returns a custom JSON scalar' do
+      let(:response_result) { [1, 2] }
+      let(:controller) do
+        json_type = Class.new(GraphQL::Types::JSON) { graphql_name 'CustomJson' }
+        Class.new(GraphqlRails::Controller) do
+          action(:index).returns(json_type.to_non_null_type)
+        end
+      end
+
+      it { is_expected.to be_truthy }
+    end
+
+    context 'when action returns a list of JSON scalars' do
+      let(:controller) do
+        Class.new(GraphqlRails::Controller) do
+          action(:index).returns('[JSON!]!')
+        end
+      end
+
+      context 'when result is an array' do
+        let(:response_result) { [{ 'key' => 'value' }, [1, 2]] }
+
+        it { is_expected.to be_truthy }
+      end
+
+      context 'when result is a hash' do
+        let(:response_result) { { 'key' => 'value' } }
+
+        it { is_expected.to be_falsey }
+      end
+    end
+
+    context 'when result is wrapped in a Delegator' do
+      let(:controller) do
+        type_name = dummy_type_name
+        Class.new(GraphqlRails::Controller) do
+          action(:index).returns("#{type_name}!")
+        end
+      end
+
+      context 'when it wraps the declared model' do
+        let(:response_result) { SimpleDelegator.new(action_response_type.new) }
+
+        it { is_expected.to be_truthy }
+      end
+
+      context 'when delegators are nested' do
+        let(:response_result) { SimpleDelegator.new(SimpleDelegator.new(action_response_type.new)) }
+
+        it { is_expected.to be_truthy }
+      end
+
+      context 'when it wraps another class' do
+        let(:response_result) { SimpleDelegator.new(Object.new) }
+
+        it { is_expected.to be_falsey }
+      end
+
+      context 'when it wraps a Struct-based declared model' do
+        let(:action_response_type) do
+          Struct.new(:id) do
+            include GraphqlRails::Model
+
+            graphql do |c|
+              c.name("DummyStructUser#{rand(10**9)}")
+              c.attribute(:id).type('ID!')
+            end
+          end
+        end
+        let(:response_result) { SimpleDelegator.new(action_response_type.new('1')) }
+
+        it { is_expected.to be_truthy }
+      end
+    end
+
     context 'when action returns a GraphQL::Schema::Object type' do
       let(:action_response_type) do
         name = dummy_type_name
@@ -363,6 +469,43 @@ RSpec.describe RSpecExtraMatchers::GraphqlMatchers::SuccessfulGraphqlControllerR
 
         it 'returns clear message' do
           expect(failure_message).to eq('Response type is a list, but the result is not a list-like object')
+        end
+      end
+
+      context 'when a non-JSON scalar response is an array' do
+        let(:response_result) { ['yes'] }
+        let(:controller) do
+          Class.new(GraphqlRails::Controller) do
+            action(:index).returns('String!')
+          end
+        end
+
+        it 'returns clear message' do
+          expect(failure_message).to eq('Response type is not a list, but the result is a list-like object')
+        end
+      end
+
+      context 'when a delegator wraps another class' do
+        let(:response_result) { [SimpleDelegator.new('Some string')] }
+
+        it 'returns clear message' do
+          expect(failure_message)
+            .to eq("Expected response to be an instance of #{action_response_type}, but it's SimpleDelegator")
+        end
+      end
+
+      context 'when a delegator returned by a single-object action wraps another class' do
+        let(:response_result) { SimpleDelegator.new(Object.new) }
+        let(:controller) do
+          type_name = dummy_type_name
+          Class.new(GraphqlRails::Controller) do
+            action(:index).returns("#{type_name}!")
+          end
+        end
+
+        it 'returns clear message' do
+          expect(failure_message)
+            .to eq("Expected response to be an instance of #{action_response_type}, but it's SimpleDelegator")
         end
       end
 
