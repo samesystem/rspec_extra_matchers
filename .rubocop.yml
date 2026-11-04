@@ -1,0 +1,33 @@
+require:
+  - rubocop-rake
+  - rubocop-rspec
+
+AllCops:
+  TargetRubyVersion: 3.1
+  NewCops: enable
+  SuggestExtensions: false
+
+# Development dependencies are declared in the gemspec
+Gemspec/DevelopmentDependencies:
+  EnforcedStyle: gemspec
+
+# Pushing to RubyGems with or without MFA is a release decision, not a lint one
+Gemspec/RequireMFA:
+  Enabled: false
+
+Layout/MultilineMethodCallIndentation:
+  EnforcedStyle: indented
+
+# The specs describe each case with nested contexts and the `let`s they override
+RSpec/NestedGroups:
+  Enabled: false
+
+RSpec/MultipleMemoizedHelpers:
+  Enabled: false
+
+RSpec/ExampleLength:
+  CountAsOne: [array, hash, heredoc, method_call]
+
+RSpec/SpecFilePathFormat:
+  CustomTransform:
+    RSpecExtraMatchers: rspec_extra_matchers
