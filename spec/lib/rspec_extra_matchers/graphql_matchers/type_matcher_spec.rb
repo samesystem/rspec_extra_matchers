@@ -342,6 +342,266 @@ RSpec.describe RSpecExtraMatchers::GraphqlMatchers::TypeMatcher do
       end
     end
 
+    context 'when a plain object field has a resolver method on the type' do
+      let(:graphql_type) do
+        Class.new(GraphQL::Schema::Object) do
+          graphql_name "DummyAccount#{rand(10**9)}"
+          field :is_admin, GraphQL::Types::Boolean, null: false
+          field :verified, GraphQL::Types::Boolean, null: false, resolver_method: :verified?
+          field :team_id, GraphQL::Types::ID, null: true
+
+          def is_admin = object.role == 'admin' # rubocop:disable Naming/PredicateName
+          def verified? = object.confirmed
+          def team_id = object.team&.fetch(:id)
+        end
+      end
+      let(:record_class) { Struct.new(:role, :confirmed, :team) }
+
+      context 'when the resolver methods return valid values' do
+        let(:record) { record_class.new('admin', false, { id: '7' }) }
+
+        it 'resolves the fields with the type methods' do
+          expect(error_messages).to be_empty
+        end
+      end
+
+      context 'when a resolver method returns an invalid value' do
+        let(:record) { record_class.new('admin', nil, { id: '7' }) }
+
+        it 'returns error message' do
+          expect(error_messages).to eq(['expected non-nullable field "verified" not to be `nil`'])
+        end
+      end
+
+      context 'when the object also has a method of the field name' do
+        let(:record_class) do
+          Struct.new(:role, :confirmed, :team) do
+            def is_admin = 'not a Boolean' # rubocop:disable Naming/PredicateName
+          end
+        end
+        let(:record) { record_class.new('guest', true, { id: '7' }) }
+
+        it 'uses the type method, as GraphQL does' do
+          expect(error_messages).to be_empty
+        end
+      end
+
+      context 'when the resolver method calls a method missing on the object' do
+        let(:record_class) { Struct.new(:confirmed, :team) }
+        let(:record) { record_class.new(true, { id: '7' }) }
+
+        it 'returns the raised error' do
+          expect(error_messages.size).to eq(1)
+          expect(error_messages.first).to start_with('Method `is_admin` for "isAdmin" field raised an error: ')
+          expect(error_messages.first).to include('role')
+        end
+      end
+    end
+
+    context 'when the record is wrapped in a Delegator' do
+      let(:organization_class) do
+        Class.new do
+          include GraphqlRails::Model
+
+          def self.name = @name ||= "DummyOrganization#{rand(10**10)}"
+
+          graphql do |c|
+            c.attribute(:id).type('ID!')
+          end
+
+          def id = '1'
+        end
+      end
+      let(:graphql_type) do
+        organization_type = organization_class
+        Class.new do
+          include GraphqlRails::Model
+
+          graphql do |c|
+            c.name("DummyMember#{rand(10**10)}")
+            c.attribute(:organization).type(organization_type).required
+          end
+
+          attr_reader :organization
+
+          def initialize(organization) = @organization = organization
+        end
+      end
+      let(:record) { SimpleDelegator.new(graphql_type.new(organization)) }
+
+      context 'when its model field holds the declared model' do
+        let(:organization) { organization_class.new }
+
+        it { is_expected.to be_empty }
+      end
+
+      context 'when its model field holds another class' do
+        let(:organization) { Struct.new(:id).new('1') }
+
+        it 'returns error message, as for the record itself' do
+          expect(error_messages).to contain_exactly(
+            "According to graphql configuration, #{organization.inspect} should be an instance of " \
+            "#{organization_class.name}, but it is "
+          )
+        end
+      end
+    end
+
+    context "when a plain type's resolver calls the field's own method missing on the object" do
+      let(:graphql_type) do
+        Class.new(GraphQL::Schema::Object) do
+          graphql_name "DummyForwarder#{rand(10**9)}"
+          field :name, String, null: false
+
+          def name = object.name
+        end
+      end
+      let(:record) { Struct.new(:id).new('1') }
+
+      it 'returns a missing field error' do
+        expect(error_messages.first).to start_with('Method `name` for "name" field does not exist on record')
+      end
+    end
+
+    context 'when a plain type implements the Relay Node interface' do
+      let(:graphql_type) do
+        Class.new(GraphQL::Schema::Object) do
+          graphql_name "DummyNode#{rand(10**9)}"
+          implements GraphQL::Types::Relay::Node
+        end
+      end
+      let(:record) { Struct.new(:id).new('1') }
+
+      it "calls the object's id, as graphql-ruby's global id resolver needs a schema" do
+        expect(error_messages).to be_empty
+      end
+    end
+
+    context 'when a plain type has a global_id_field' do
+      let(:graphql_type) do
+        Class.new(GraphQL::Schema::Object) do
+          graphql_name "DummyGlobalId#{rand(10**9)}"
+          global_id_field :id
+        end
+      end
+      let(:record) { Struct.new(:id).new('1') }
+
+      it "calls the object's id, as the generated global id resolver needs a schema" do
+        expect(error_messages).to be_empty
+      end
+    end
+
+    context 'when a Delegator over a GraphqlRails record has fields the record does not declare' do
+      let(:model_class) do
+        Class.new do
+          include GraphqlRails::Model
+
+          graphql do |c|
+            c.name("DummyPresented#{rand(10**9)}")
+            c.attribute(:id).type('ID!')
+          end
+
+          def id = '1'
+        end
+      end
+      let(:graphql_type) do
+        Class.new(GraphQL::Schema::Object) do
+          graphql_name "DummyPresenter#{rand(10**9)}"
+          field :id, GraphQL::Types::ID, null: false
+          field :tags, [String], null: false
+        end
+      end
+      let(:record) { Class.new(SimpleDelegator) { def tags = ['a'] }.new(model_class.new) }
+
+      it { is_expected.to be_empty }
+    end
+
+    context 'when a decorator model wraps another GraphqlRails model' do
+      let(:organization_class) do
+        Class.new do
+          include GraphqlRails::Model
+
+          def self.name = @name ||= "DummyOrganization#{rand(10**10)}"
+
+          graphql do |c|
+            c.attribute(:id).type('ID!')
+          end
+
+          def id = '1'
+        end
+      end
+      let(:wrapped_class) do
+        Class.new do
+          include GraphqlRails::Model
+
+          graphql do |c|
+            c.name("DummyWrapped#{rand(10**10)}")
+            c.attribute(:id).type('ID!')
+          end
+
+          def id = '1'
+        end
+      end
+      let(:graphql_type) do
+        organization_type = organization_class
+        Class.new(SimpleDelegator) do
+          include GraphqlRails::Model
+
+          graphql do |c|
+            c.name("DummyDecorator#{rand(10**10)}")
+            c.attribute(:organization).type(organization_type).required
+          end
+
+          attr_accessor :organization
+        end
+      end
+      let(:record) { graphql_type.new(wrapped_class.new).tap { _1.organization = organization } }
+
+      context "when the decorator's model field holds another class" do
+        let(:organization) { Struct.new(:id).new('1') }
+
+        it "checks the field against the decorator's declaration" do
+          expect(error_messages).to contain_exactly(
+            a_string_including("should be an instance of #{organization_class.name}")
+          )
+        end
+      end
+
+      context "when the decorator's model field holds the declared model" do
+        let(:organization) { organization_class.new }
+
+        it { is_expected.to be_empty }
+      end
+    end
+
+    context 'when a field is named after a built-in method' do
+      let(:graphql_type) do
+        Class.new(GraphQL::Schema::Object) do
+          graphql_name "DummyThing#{rand(10**9)}"
+          field :display, String, null: false, method_conflict_warning: false
+        end
+      end
+      let(:record) { Struct.new(:display).new('Shown') }
+
+      it 'calls the object method, not the built-in one on the type' do
+        expect(error_messages).to be_empty
+      end
+    end
+
+    context 'when a field is named after a method every object has, written in Ruby' do
+      let(:graphql_type) do
+        Class.new(GraphQL::Schema::Object) do
+          graphql_name "DummyThing#{rand(10**9)}"
+          field :presence, String, null: false, method_conflict_warning: false
+        end
+      end
+      let(:record) { Struct.new(:presence).new('Here') }
+
+      it 'calls the object method, not the one on the type' do
+        expect(error_messages).to be_empty
+      end
+    end
+
     context 'when graphql type is a scalar' do
       let(:graphql_type) { GraphQL::Types::Boolean.to_non_null_type }
 
@@ -723,6 +983,12 @@ RSpec.describe RSpecExtraMatchers::GraphqlMatchers::TypeMatcher do
         end
 
         it { is_expected.to be_empty }
+
+        context 'when the model is wrapped in a Delegator' do
+          let(:record) { owner_class.new(SimpleDelegator.new(model_class.new)) }
+
+          it { is_expected.to be_empty }
+        end
       end
 
       context 'when the record is not a GraphqlRails model but its type is' do
