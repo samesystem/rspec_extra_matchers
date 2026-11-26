@@ -218,6 +218,45 @@ RSpec.describe RSpecExtraMatchers::GraphqlMatchers::ValidGraphqlDecoratorMatcher
       end
     end
 
+    context 'when graphql field has a GraphQL object type that also includes GraphqlRails::Model' do
+      let(:graphql_decorator) do
+        stub_const('DummyPlainOrganizationType', plain_organization_type)
+        value = organization_value
+
+        Class.new(super()) do
+          graphql.attribute(:plain_organization).type('DummyPlainOrganizationType')
+          graphql.attribute(:plain_organizations).type('[DummyPlainOrganizationType!]!')
+
+          define_method(:plain_organization) { value }
+          define_method(:plain_organizations) { [value] }
+        end
+      end
+
+      let(:plain_organization_type) do
+        Class.new(GraphQL::Schema::Object) do
+          include GraphqlRails::Model
+
+          graphql_name "DummyPlainOrganization#{rand(10**10)}"
+
+          field :id, GraphQL::Types::ID, null: false
+        end
+      end
+
+      context 'when the value answers every field' do
+        let(:organization_value) { Struct.new(:id).new('456') }
+
+        it { is_expected.to be_empty }
+      end
+
+      context 'when the value misses a field' do
+        let(:organization_value) { Struct.new(:name).new('Acme') }
+
+        it 'reports the missing field, not the class' do
+          expect(error_messages).to contain_exactly(a_string_including('plainOrganizations[0].id'))
+        end
+      end
+    end
+
     context 'when graphql field has GraphqlRails::Model type, but value is not a GraphqlRails::Model' do
       let(:record_params) { super().merge(organization: 'not_a_model') }
 

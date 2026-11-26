@@ -65,11 +65,14 @@ module RSpecExtraMatchers
         assert_nested_fields(value, type:) if @deeply
       end
 
+      # A GraphQL schema type that also includes GraphqlRails::Model wraps whatever object the resolver returns,
+      # so its value is checked by its fields, as for any other GraphQL object type, not by its class
       def graphql_model?
         return false if graphql_rails_parent.nil? || graphql_rails_attribute.nil?
 
         attribute_model = graphql_rails_attribute.graphql_model
-        attribute_model.is_a?(Class) && attribute_model < GraphqlRails::Model
+        attribute_model.is_a?(Class) && attribute_model < GraphqlRails::Model &&
+          !(attribute_model < GraphQL::Schema::Member)
       end
 
       def graphql_rails_attribute
