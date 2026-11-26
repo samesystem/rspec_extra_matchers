@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.2] - 2026-11-26
+
+### Fixed
+
+* A field typed as a `GraphQL::Schema::Object` subclass that also includes `GraphqlRails::Model` is checked by the type's fields, as for any other GraphQL object type, instead of requiring the value to be an instance of the type class. GraphQL wraps whatever object the resolver returns in such a type, so no resolver value is ever an instance of it, and every value was reported as "should be an instance of" the type. `be_successful_graphql_request` already treated an action returning such a type this way
+
 ### Changed
 
 * The gemspec requires Ruby 3.1 or later, which the code already needed: it uses hash shorthand and anonymous block arguments
